@@ -1,58 +1,42 @@
-from dependencies import *
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+from components import Attention, Encoder, PositionalEncoding
+from models.base import ModeSwitcherBase
 
 
-class PositionSimple(nn.Module):
-    class Mode:
+class SoftPointerNetwork(nn.Module, ModeSwitcherBase):
+    class Mode(ModeSwitcherBase.Mode):
         weights = "weights"
         position = "position"
         gradient = "gradient"
         argmax = "argmax"
 
-    def __getattr__(self, item):
-        cleaned = item.replace("is_", "").replace("with_", "")
-        if hasattr(self.Mode, cleaned):
-            mode = getattr(self.Mode, cleaned)
-            if "is_" in item:
-                return self.mode == mode
-            elif "with_" in item:
-                self.mode = mode
-                return self
-        return super().__getattr__(item)
-
-    def __dir__(self):
-        return super().__dir__() + [f"is_{k}" for k in self.Mode.keys] + [f"with_{k}" for k in self.Mode.keys]
-
-    def __init__(self, embedding_size, embedding_audio_size, hidden_size, vocab_size, device, attention_size=None,
-                 dropout=0.35):
+    def __init__(
+            self,
+            embedding_transcription_size,
+            embedding_audio_size,
+            hidden_size,
+            device,
+            dropout=0.35,
+            # position encoding time scaling
+            time_transcription_scale=8.344777745411855,
+            time_audio_scale=1,
+            position_encoding_size=32,
+    ):
         super().__init__()
-        out_dim = hidden_size  # vocab_size
-        self.encoder_transcription = Encoder(hidden_size, embedding_size, out_dim=out_dim, num_layers=2,
-                                             dropout=dropout, time_scale=POS_TRANSCRIPTION_SCALE)
-
-        self.encoder_audio = Encoder(hidden_size, embedding_audio_size, out_dim=out_dim, num_layers=2, dropout=dropout,
-                                     time_scale=POS_SCALE)
-
-        # self.encoder_transcription_2 = Encoder(hidden_size, out_dim, out_dim=vocab_size, num_layers=2, dropout=dropout, time_scale=None)
-        # self.encoder_audio_2 = Encoder(hidden_size, out_dim, out_dim=vocab_size, num_layers=2, dropout=dropout, time_scale=POS_SCALE)
-
-        self.attn = Attention(None)
-        self.gradient = (torch.cumsum(torch.ones(2 ** 14), 0).unsqueeze(1) - 1).cuda()
-        self.zero = torch.zeros(256, 2048, vocab_size).to(device)
-        self.pos_encode = PositionalEncoding(vocab_size, dropout, scale=POS_SCALE)
-
-        print("scale:", POS_TRANSCRIPTION_SCALE)
-        self.vocab_size = vocab_size
-        self.device = device
-        self.to(device)
         self.mode = self.Mode.gradient
-        self.flags = {}
+        self.position_encoding_size = position_encoding_size
+        self.device = device
         self.use_iter = True
         self.use_pos_encode = True
+        self.use_pre_transformer = True
 
         self.t_transformer = nn.Sequential(
-            nn.Linear(embedding_size, 32),
+            nn.Linear(embedding_transcription_size, 32),
             nn.Sigmoid(),
-            nn.Linear(32, embedding_size),
+            nn.Linear(32, embedding_transcription_size),
             nn.Sigmoid()
         ).to(device)
 
@@ -63,37 +47,78 @@ class PositionSimple(nn.Module):
             nn.Sigmoid()
         ).to(device)
 
-    def weights_to_positions(self, weights, argmax=False):
-        batch_size, audio_size, input_size = weights.shape
+        self.encoder_transcription = Encoder(
+            hidden_size=hidden_size,
+            embedding_size=embedding_transcription_size,
+            out_dim=hidden_size,
+            num_layers=2,
+            dropout=dropout,
+            time_scale=time_transcription_scale)
 
+        self.encoder_audio = Encoder(
+            hidden_size=hidden_size,
+            embedding_size=embedding_audio_size,
+            out_dim=hidden_size,
+            num_layers=2,
+            dropout=dropout,
+            time_scale=time_audio_scale,
+        )
+
+        self.attn = Attention(None)
+        self.gradient = (torch.cumsum(torch.ones(2 ** 14), 0).unsqueeze(1) - 1).to(device)
+        self.zero = torch.zeros(hidden_size, 2048, self.position_encoding_size).to(device)
+        self.pos_encode = PositionalEncoding(self.position_encoding_size, dropout, scale=time_audio_scale)
+
+        self.to(device)
+
+    def weights_to_positions(self, weights, argmax=False, position_encodings=False):
         batch, trans_len, seq_len = weights.shape
+
+        if position_encodings:
+            position_encoding = self.pos_encode(torch.zeros(batch, seq_len, self.position_encoding_size))
+            positions = torch.bmm(weights, position_encoding)
+            return positions[:, :-1]
+
         if argmax:
             return weights.max(2)[1][:, :-1]
+
         positions = (self.gradient[:seq_len] * weights.transpose(1, 2)).sum(1)[:, :-1]
         return positions
 
     def forward(self, features_transcription, mask_transcription, features_audio, mask_audio):
+        # TODO: use pytorch embeddings
+        batch_size, out_seq_len, _ = features_transcription.shape
+        audio_seq_len = features_audio.shape[1]
+
+        # add some temporal info for transcriptions
         features_transcription = features_transcription.clone()
         features_transcription[:, :-1] += features_transcription[:, 1:] * 0.55
 
-        features_transcription = self.t_transformer(features_transcription)
-        features_audio = self.a_transformer(features_audio)
+        # add some extra spice to inputs before encoders
+        if self.use_pre_transformer:
+            # TODO: move to a canonical internal size
+            features_transcription = self.t_transformer(features_transcription)
+            features_audio = self.a_transformer(features_audio)
 
-        encoder_transcription_outputs, _ = self.encoder_transcription(features_transcription,
-                                                                      skip_pos_encode=not self.use_pos_encode)  # # # #
-
-        encoder_audio_outputs, _ = self.encoder_audio(features_audio, skip_pos_encode=not self.use_pos_encode)
+        encoder_transcription_outputs, _ = self.encoder_transcription(
+            features_transcription,
+            skip_pos_encode=not self.use_pos_encode,
+        )
+        encoder_audio_outputs, _ = self.encoder_audio(
+            features_audio,
+            skip_pos_encode=not self.use_pos_encode
+        )
 
         if not self.use_iter:
             # not progressive batching
-            w = self.attn(F.tanh(encoder_transcription_outputs), mask_transcription, F.tanh(encoder_audio_outputs),
-                          mask_audio)
+            w = self.attn(
+                F.tanh(encoder_transcription_outputs), mask_transcription,
+                F.tanh(encoder_audio_outputs), mask_audio)
+
         else:
             encoder_transcription_outputs = F.relu(encoder_transcription_outputs)
             encoder_audio_outputs = F.relu(encoder_audio_outputs)
-            # tensor to store decoder outputs
-            batch_size, out_seq_len, _ = features_transcription.shape
-            w = torch.zeros(batch_size, out_seq_len, features_audio.shape[1]).to(self.device)
+            w = torch.zeros(batch_size, out_seq_len, audio_seq_len).to(self.device)  # tensor to store decoder outputs
 
             w_masks, w_mask, iter_mask_audio = [], None, mask_audio
             for t in range(out_seq_len):
@@ -118,16 +143,15 @@ class PositionSimple(nn.Module):
                     iter_memory = torch.cat([a, b], dim=2)
                     iter_mask_audio = mask_audio * (w_mask > 0.1) if mask_audio is not None else w_mask > 0.1
 
-                    # iter_memory = iter_memory * (w_mask.unsqueeze(2) * (1 - pad) + pad)
-                # print(iter_input.shape, mask_transcription.shape, (iter_memory).shape, iter_mask_audio.shape)
-                iter_mask_transcription = mask_transcription[:, t:(t + 1)] if mask_transcription is not None else None
-                w_slice = self.attn(iter_input, iter_mask_transcription, (iter_memory), iter_mask_audio)
+                iter_mask_transcription = None if mask_transcription is None else mask_transcription[:, t:(t + 1)]
+                w_slice = self.attn(iter_input, iter_mask_transcription, iter_memory, iter_mask_audio)
 
                 if w_mask is not None:
                     w[:, t:(t + 1), :] = w_slice * w_mask.unsqueeze(1)
                 else:
                     w[:, t:(t + 1), :] = w_slice
 
+                # update the progressive mask
                 w_mask = w_slice.squeeze(1).clone()
                 w_mask = torch.cumsum(w_mask, dim=1).detach()
                 w_masks.append(w_mask)
@@ -139,18 +163,16 @@ class PositionSimple(nn.Module):
         if self.is_gradient or self.is_argmax:
             return self.weights_to_positions(w, argmax=self.is_argmax)
 
-        batch, seq_len, dimensions = encoder_audio_outputs.shape
-        processsed_audio = self.zero[:batch, :seq_len, :self.vocab_size]
-        pos = self.pos_encode(processsed_audio)
-        position_encodes = torch.bmm(w, pos)
-
         if self.is_position:
-            return position_encodes[:, :-1]
+            return self.weights_to_positions(w, position_encodings=True)
+
+        raise NotImplementedError(f"Mode {self.mode} not Implemented")
 
 
 if __name__ == '__main__':
-    pass
+    print(SoftPointerNetwork(54, 26, 256, device='cpu'))
     """
+
     position_model = PositionSimple(KNOWN_LABELS_COUNT, INPUT_SIZE, 256, POS_DIM, device).to(device)
     # train(position_model, 10, toy_dataset.batch(64), toy_dataset.batch(128), loss_function=MaskedMSE(), train_function=position_gradient_trainer, lr_decay=0.91, lr=0.00151)
     # load(position_model, "/content/drive/My Drive/dataset/position_model-reforged-repeat-10.pth") # 7 is ok, 8, 10 is cool,
@@ -167,65 +189,6 @@ if __name__ == '__main__':
 
     # load(position_model, "/content/drive/My Drive/dataset/position_model-derp.pth")
 
-    """
-    load(position_model, "/content/drive/My Drive/dataset/position_model-final-4.pth")
-    TOTAL
-    344903.16
-    [position]
-    DIFF
-    abs
-    mean: 7.01
-    ms(-0.39)
-    min: 0.00
-    ms
-    max: 780.91
-    ms
-    55.97 % < 5
-    ms
-    81.93 % < 10
-    ms
-    90.88 % < 15
-    ms
-    94.61 % < 20
-    ms
-    96.62 % < 25
-    ms
-    97.79 % < 30
-    ms
-    98.48 % < 35
-    ms
-    98.87 % < 40
-    ms
-    99.15 % < 45
-    ms
-    99.35 % < 50
-    ms
-    99.48 % < 55
-    ms
-    99.57 % < 60
-    ms
-    99.65 % < 65
-    ms
-    99.67 % < 70
-    ms
-    99.70 % < 75
-    ms
-    99.72 % < 80
-    ms
-    99.74 % < 85
-    ms
-    99.76 % < 90
-    ms
-    99.77 % < 95
-    ms
-    99.79 % < 100
-    ms
-    99.81 % < 105
-    ms
-    100.01 % < 9999
-    ms
-55.97 % 81.93 % 90.88 % 94.61 % 96.62 % 97.79 % 98.48 % 98.87 % 99.15 % 99.35 % 99.48 % 99.57 % 99.65 % 99.67 % 99.70 % 99.72 % 99.74 % 99.76 % 99.77 % 99.79 %
-"""
 position_model.with_gradient
 
 

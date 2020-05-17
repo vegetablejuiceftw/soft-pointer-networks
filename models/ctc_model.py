@@ -1,3 +1,5 @@
+from time import time
+
 from dependencies import *
 
 
@@ -113,7 +115,6 @@ show_audio(multy_context_audio_model, test_dataset, "test", plot_only=True)
 torch.cuda.empty_cache()
 work_dataset = train_dataset
 evaluation = [test_dataset.batch(64), train_eval_dataset.batch(64)]
-from time import time
 
 for i in range(1):
     start = time()
@@ -194,4 +195,3 @@ show_audio(multy_context_audio_model, test_dataset, "test", duration_model=durat
 # 	99.8%	 < 95ms		99.9%	 < 100ms
 # 	99.9%	 < 105ms		100.0%	 < 9999ms
 # 49.30% 77.92% 89.03% 93.57% 95.87% 97.27% 98.11% 98.66% 99.03% 99.24% 99.41% 99.53% 99.60% 99.67% 99.71% 99.75% 99.78% 99.81% 99.83% 99.86%
-
