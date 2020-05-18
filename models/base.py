@@ -1,4 +1,7 @@
 from enum import Enum
+from typing import List
+
+import torch
 
 
 class ModeSwitcherBase:
@@ -34,10 +37,31 @@ class ModeSwitcherBase:
                 self.mode = mode
                 return self
         # noop
-        return getattr(super(), item)
+        return super().__getattr__(item)
 
     def __dir__(self):
         return list(super().__dir__()) + [f"is_{k}" for k in self.Mode.keys()] + [f"with_{k}" for k in self.Mode.keys()]
 
     def __str__(self):
         return f"{self.__class__.__name__}.with_{self.mode.name}"
+
+
+class ExportImportMixin:
+    """
+    Simple wrapper to load / export model weights
+    - allows to skip import of keys which contain a ignore tokens,
+        i.e 'coder_w' will skip 'encoder_weights' and 'decoder_weights'
+    """
+    def load(self: torch.nn.Module, path, ignore: List[str] = None):
+        model_dict = self.state_dict()
+        pretrained_dict = torch.load(path, map_location=next(self.parameters()).device)
+        # 1. filter out unnecessary keys
+        pretrained_dict = {k: v for k, v in pretrained_dict.items() if
+                           k in model_dict and (not ignore or not any((i in k) for i in ignore))}
+        # 2. overwrite entries in the existing state dict
+        model_dict.update(pretrained_dict)
+        # 3. load the new state dict
+        self.load_state_dict(model_dict)
+
+    def export_model(self: torch.nn.Module, path):
+        torch.save(self.state_dict(), path)

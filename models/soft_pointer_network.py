@@ -3,10 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from components import Attention, Encoder, PositionalEncoding
-from models.base import ModeSwitcherBase
+from models.base import ExportImportMixin, ModeSwitcherBase
 
 
-class SoftPointerNetwork(nn.Module, ModeSwitcherBase):
+class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
     class Mode(ModeSwitcherBase.Mode):
         weights = "weights"
         position = "position"

@@ -1,25 +1,9 @@
-from dependencies import *
+from constants import *
 
 
 @contextlib.contextmanager
 def nullcontext():
     yield None
-
-
-def load(model, path, ignore: list = None):
-    model_dict = model.state_dict()
-    pretrained_dict = torch.load(path)
-    # 1. filter out unnecessary keys
-    pretrained_dict = {k: v for k, v in pretrained_dict.items() if
-                       k in model_dict and (not ignore or not any((i in k) for i in ignore))}
-    # 2. overwrite entries in the existing state dict
-    model_dict.update(pretrained_dict)
-    # 3. load the new state dict
-    model.load_state_dict(model_dict)
-
-
-def export_model(model, path):
-    torch.save(model.state_dict(), path)
 
 
 def get_aligned_result(result: np.ndarray, labels: np.ndarray) -> np.ndarray:
@@ -55,7 +39,6 @@ def generate_duration_transcription(transcriptions: np.ndarray, durations: np.nd
     """Durations be scaled"""
     # durations *= DURATION_SCALER
     # return transcriptions
-    ms_per_step = WIN_STEP * 1000
     stack = []
     for feature, duration in zip(transcriptions, durations):
         adj_dur = duration / ms_per_step
@@ -68,7 +51,7 @@ def generate_duration_transcription(transcriptions: np.ndarray, durations: np.nd
     return transcription_with_duration
 
 
-def find_borders_pathed(path: list, original_mapping: list, ms_per_step: float):
+def find_borders_pathed(path: list, original_mapping: list):
     borders = []
     last = path[0][1]
 
@@ -89,6 +72,9 @@ def find_borders_pathed(path: list, original_mapping: list, ms_per_step: float):
 
     diff = (borders_truth - borders_pred)
     return None, None, diff
+
+
+duration_cache = {}
 
 
 def evaluate_result(model, iterator, lower=True, duration_model=None):
@@ -377,7 +363,6 @@ def show_position(model, dataset, duration_combined_model=None, sample_size=2000
     if duration_combined_model is not None:
         duration_combined_model.eval()
 
-    pos_map = pos_prep.pe
     c = torch.cumsum(torch.ones(2 ** 14), 0).unsqueeze(1) - 1
     print("dataset len", len(dataset))
 
@@ -392,20 +377,7 @@ def show_position(model, dataset, duration_combined_model=None, sample_size=2000
         border = inp.border
 
         length = audio.shape[0] + 0
-        pos_feature = pos_map[:length, :]
-
         borders_predicted = model(transcription.unsqueeze(0), None, audio.unsqueeze(0), None)[0]
-
-        # b = borders_predicted.detach().cpu().numpy() * ms_per_step
-        # prev = 0
-        # switched = False
-        # for i, v in enumerate(b):
-        #     if v < prev:
-        #         switched = True
-        #         after = b[i+1] if i + 1 < len(b) else prev + 10
-        #         v = (prev + after) / 2
-        #     b[i] = v
-        #     prev = v
 
         if duration_combined_model is None:
             new = borders_predicted.detach().cpu().numpy() * ms_per_step
@@ -512,19 +484,13 @@ def location_fix(positions, truth, durations, end_of_audio):
     return positions, difos
 
 
-def show_position_batched(model, dataset, duration_combined_model=None, report_error=750, skip=False, plotting=False,
-                          dumb_limit=500):
+def show_position_batched(model, dataset, duration_combined_model=None, report_error=750, plotting=False):
     model.eval()
     if duration_combined_model is not None:
         duration_combined_model.eval()
 
-    pos_map = pos_prep.pe
-    c = torch.cumsum(torch.ones(2 ** 14), 0).unsqueeze(1) - 1
-    print("dataset len", len(dataset))
-
     diffs = []
     label_ids = []
-    att = Attention(POS_DIM)
 
     for batch in dataset.batch(32):
         features_audio = batch.features.padded
@@ -538,8 +504,10 @@ def show_position_batched(model, dataset, duration_combined_model=None, report_e
 
         batch_s, time_s, feat_s = features_audio.shape
 
-        borders_predicted = model(features_transcription, masks_transcription, features_audio,
-                                  masks_audio).cpu().detach().numpy()
+        borders_predicted = model(
+            features_transcription, masks_transcription,
+            features_audio, masks_audio
+        ).cpu().detach().numpy()
 
         if duration_combined_model is not None:
             duration_batch = (duration_combined_model(features_transcription, masks_transcription, features_audio,
@@ -548,7 +516,6 @@ def show_position_batched(model, dataset, duration_combined_model=None, report_e
         for i in range(batch_s):
             label_id = [l_id for l_id, ms in batch.out_map[i]]
             idx = batch.index[i]
-            key = batch.key[i]
 
             length = border_lengths[i]
 
@@ -558,7 +525,6 @@ def show_position_batched(model, dataset, duration_combined_model=None, report_e
 
             b = predicted_border * ms_per_step
 
-            # b, difos = location_fix(b.copy(), truth_border * ms_per_step, duration_batch[i].reshape(-1), end_of_audio)
             switched = False
             prev = 0
             if duration_combined_model is not None:
@@ -588,11 +554,6 @@ def show_position_batched(model, dataset, duration_combined_model=None, report_e
             diff = (truth_border * ms_per_step - b)
             if np.abs(diff).max() > report_error:
                 print(f"[id:{idx:3d}]  [{diff.min():5.0f} {diff.max():5.0f}]  {length:4d} {switched}")
-                # print(*difos, sep="\n")
-            #     if skip:
-            #         continue
-            # if switched and skip:
-            #     continue
 
             diffs.append(diff)
             label_ids.append(label_id)

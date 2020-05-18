@@ -1,82 +1,9 @@
-from dependencies import *
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(device)
-
-# caching
-duration_model = None
-duration_cache = {}
-
-BASE_PATH = '/content/TIMIT-PLUS'
-FULL_FODLER_PATH = join(BASE_PATH, 'data')
-INPUT_SIZE = 26
-
-# WIN_STEP = 0.015
-WIN_STEP = 0.010
-# WIN_STEP = 0.005
-
-WIN_SIZE = 0.025
-# WIN_SIZE = 0.030
-# WIN_SIZE = 0.020
-# WIN_SIZE = 0.010
-# WIN_SIZE = 0.015
-# WIN_SIZE = 0.020
-
-DURATION_SCALER = 256.  # duration models do not play well with 123ms bot not also with 0.1sec ...
-
-FOUND_LABELS = dict([
-    ('h#', 12600), ('ix', 11587), ('s', 10114), ('iy', 9663), ('n', 9569), ('r', 9064),
-    ('tcl', 8978), ('l', 8157), ('kcl', 7823), ('ih', 6760), ('dcl', 6585), ('k', 6488),
-    ('t', 5899), ('m', 5429), ('ae', 5404), ('eh', 5293), ('z', 5046), ('ax', 4956), ('q', 4834),
-    ('d', 4793), ('axr', 4790), ('w', 4379), ('aa', 4197), ('ao', 4096), ('dh', 3879),
-    ('dx', 3649), ('pcl', 3609), ('p', 3545), ('ay', 3242), ('ah', 3185), ('f', 3128),
-    ('ey', 3088), ('b', 3067), ('sh', 3034), ('gcl', 3031), ('ow', 2913), ('er', 2846),
-    ('g', 2772), ('v', 2704), ('bcl', 2685), ('ux', 2488), ('y', 2349), ('epi', 2000),
-    ('ng', 1744), ('jh', 1581), ('hv', 1523), ('pau', 1343), ('nx', 1331), ('hh', 1313),
-    ('el', 1294), ('ch', 1081), ('th', 1018), ('en', 974), ('oy', 947), ('aw', 945),
-    ('uh', 756), ('uw', 725), ('ax-h', 493), ('zh', 225), ('em', 171), ('eng', 43), ])
-
-TRANSFORM_MAPPING = {
-    # First, the sentence-beginning and sentence-ending pause symbols /h#/ were mapped to pause (/pau/).
-    'h#': 'pau',
-    # Epenthetic silence (/epi/) was also mapped to pause.
-    'epi': 'pau',
-    # The syllabic phonemes /em/, /en/, /eng/, and /el/ were mapped to their non-syllabic counterparts /m/, /n/, /ng/, and /l/, respectively.
-    "em": "m",
-    "en": "n",
-    "eng": "ng",
-    "el": "l",
-    # The glottal closure symbol /q/ was merged based on weird rules
-    "q": None,
-}
-
-NO_BORDER_MAPPING = {
-    'pau', 'pcl', 'bcl', 'tcl', 'dcl', 'kcl', 'gcl',
-}
-
-KNOWN_LABELS = list(
-    sorted(set(TRANSFORM_MAPPING.get(k, k) for k in sorted(FOUND_LABELS.keys()) if TRANSFORM_MAPPING.get(k, k))))
-KNOWN_LABELS_COUNT = len(KNOWN_LABELS)
-MAP_LABELS = {
-    label: (
-        [int(KNOWN_LABELS.index(label) == i) for i in range(KNOWN_LABELS_COUNT)],
-        KNOWN_LABELS.index(label),
-    )
-    for label in KNOWN_LABELS
-}
-
-ms_per_step = WIN_STEP * 1000
-POS_DIM = 32
-POS_SCALE = 1
-pos_prep = PositionalEncodingLabeler(POS_DIM, scale=POS_SCALE)
-MERGE_DOUBLES = False
-unholy = set()
+from constants import *
 
 
 class AudioCaching:
     BASE_FOLDER = '/content/TIMIT-PLUS'
     CACHE_FOLDER = BASE_FOLDER + '-CACHE'
-    # AUDIO_SCALING = 32768.
     AUDIO_RATE = 16000
 
     @classmethod
@@ -100,8 +27,6 @@ class AudioCaching:
         cache_file_path = cls.to_file_path(file_path, key)
         # cached version exists :D
         if os.path.isfile(cache_file_path):
-            # loader = wavfile.read(cache_file_path)[1]
-            # audio = audio.astype(np.float32) / audio_scaling
             print("+", cache_file_path)
             return cls.load(cache_file_path)
         else:
@@ -152,7 +77,7 @@ def dedupe(tags):
     return labels
 
 
-def find_borders(output_ids, original_mapping, ms_per_step=int(WIN_STEP * 1000)):
+def find_borders(output_ids, original_mapping):
     # add half to the border, as it is between the two frames
     arr = (np.where(output_ids[:-1] != output_ids[1:])[0] + 0.5) * ms_per_step
     last = output_ids.shape[0] * ms_per_step
@@ -197,6 +122,7 @@ class PositionalEncodingLabeler(nn.Module):
 
 class DirectMaskDataset(Dataset):
     base = '/content'
+    CACHE = {}
 
     @classmethod
     def load_csv(cls, prefix, sa=False):
@@ -247,8 +173,8 @@ class DirectMaskDataset(Dataset):
                 continue
 
             unholy_combination = prev in NO_BORDER_MAPPING and tag in NO_BORDER_MAPPING
-            if unholy_combination:
-                unholy.add((prev, tag))
+            # if unholy_combination:
+                # unholy.add((prev, tag))
 
             if prev == tag and MERGE_DOUBLES or unholy_combination or q_tag:
                 tag_id, ems = tag_mapping[-1]
@@ -278,15 +204,17 @@ class DirectMaskDataset(Dataset):
 
         return tag_ints, tag_vecs, tag_mapping, transcription
 
-    def get_set(self, key, func):
-        value = CACHE.get(key)
+    @classmethod
+    def get_set(cls, key, func):
+        value = cls.CACHE.get(key)
         value = value if value is not None else func()
-        CACHE[key] = value
+        cls.CACHE[key] = value
         return value
 
     def __init__(self, files, limit=None, mask=None, augment=False, duplicate=1, seed="42"):
-
         random = Random(seed)  # init random generator
+        pos_prep = PositionalEncodingLabeler(POS_DIM, scale=POS_SCALE)
+
         self.counts = []
 
         base = self.base
