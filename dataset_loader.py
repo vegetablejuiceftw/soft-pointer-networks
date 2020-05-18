@@ -61,11 +61,6 @@ class Utterance(NamedTuple):
     audio_file: str
     label_file: str
 
-
-def stack(arr, tensor):
-    return [tensor(a).to(device) for a in arr]
-
-
 def dedupe(tags):
     labels = []
     last = None
@@ -211,7 +206,8 @@ class DirectMaskDataset(Dataset):
         cls.CACHE[key] = value
         return value
 
-    def __init__(self, files, limit=None, mask=None, augment=False, duplicate=1, seed="42"):
+    def __init__(self, files, limit=None, augment=False, duplicate=1, seed="42", device=torch.device('cpu')):
+        self.device = device
         random = Random(seed)  # init random generator
         pos_prep = PositionalEncodingLabeler(POS_DIM, scale=POS_SCALE)
 
@@ -227,6 +223,9 @@ class DirectMaskDataset(Dataset):
 
         duplicate_set = set()
         self.files = []
+
+        def stack(arr, tensor):
+            return [tensor(a).to(self.device) for a in arr]
 
         for i, (label_file, audio_file) in enumerate(files * duplicate):
             assert self.get_name(label_file) == self.get_name(audio_file)
@@ -414,20 +413,21 @@ class DirectMaskDataset(Dataset):
             label_file, audio_file,
         )
 
-    @staticmethod
-    def features_batch_process(batch) -> UtteranceBatch:
+    def features_batch_process(self, batch) -> UtteranceBatch:
         # this is used when a list of data items is transformed into a batch
         # TODO: could we, should we use pack_padded_sequence
-        padded = nn.utils.rnn.pad_sequence(batch, batch_first=True).to(device)
-        lens = torch.tensor([len(item) for item in batch]).to(device)
+        padded = nn.utils.rnn.pad_sequence(batch, batch_first=True).to(self.device)
+        lens = torch.tensor([len(item) for item in batch]).to(self.device)
         b, max_len, *f = padded.shape
         return UtteranceBatch(
             padded,
-            torch.arange(max_len).expand(len(lens), max_len).to(device) < lens.unsqueeze(1),
+            torch.arange(max_len).expand(len(lens), max_len).to(self.device) < lens.unsqueeze(1),
             lens
         )
 
-    def batch(self, batch_size=128, sort_key=lambda x: len(x.features), sort=False, shuffle=True,
-              sort_within_batch=True):
-        return BucketIterator(self, batch_size=batch_size, sort_key=sort_key, sort=sort, shuffle=shuffle,
-                              sort_within_batch=sort_within_batch)
+    def batch(self, batch_size=128, sort_key=None, sort=False, shuffle=True, sort_within_batch=True):
+        default_sort = lambda x: len(x.features)
+        return BucketIterator(
+            self, batch_size=batch_size, sort_key=sort_key or default_sort,
+            sort=sort, shuffle=shuffle, sort_within_batch=sort_within_batch,
+        )
