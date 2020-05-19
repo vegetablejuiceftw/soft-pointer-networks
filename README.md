@@ -1,5 +1,14 @@
 # soft-pointer-networks
 
+https://github.com/vegetablejuiceftw/soft-pointer-networks
+
+### Demo 
+- web-demo: https://colab.research.google.com/drive/15HL-porabGKIsWxRmtZghfTd7_SCD4dH?usp=sharing
+- SRC: `Soft_Pointer_Network_DEMO.ipynb`
+- RAW: `V22_[Final]_DARPA_TIMIT_Acoustic_Phonetic_Continuous_Speech.ipynb`
+    
+# The Model
+
 As in `/models/soft_pointer_network.py`:
 
 ```python
@@ -167,6 +176,7 @@ class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
         raise NotImplementedError(f"Mode {self.mode} not Implemented")
 ```
 
+# Setup hints
 ## Input files can be found here
 
 ```
