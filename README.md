@@ -4,8 +4,10 @@ https://github.com/vegetablejuiceftw/soft-pointer-networks
 
 ### Demo 
 - web-demo: https://colab.research.google.com/drive/15HL-porabGKIsWxRmtZghfTd7_SCD4dH?usp=sharing
-- SRC: `Soft_Pointer_Network_DEMO.ipynb`
-- RAW: `V22_[Final]_DARPA_TIMIT_Acoustic_Phonetic_Continuous_Speech.ipynb`
+- src: `Soft_Pointer_Network_DEMO.ipynb`
+
+_There is also the raw file available:_
+- raw: `Soft_Pointer_Network_RAW.ipynb`
     
 # The Model
 

@@ -33,7 +33,7 @@ class MultyContextAttentionAudio(nn.Module):
         self.mode = "chain"
         # load(self, "/content/drive/My Drive/dataset/multy-attention-audio-7.pth", ignore=['pos_encode'])  # without pos encode
         # load(self, "/content/drive/My Drive/dataset/multy-attention-audio-pos-6-half.pth", ignore=['pos_encode'])  # with pos encode
-        load(self, "/content/drive/My Drive/dataset/CTC-audio-final.pth")
+        load(self, "/content/drive/My Drive/dataset/CTC-final.pth")
 
     def forward(self, features_transcription, mask_transcription, features_audio, mask_audio):
         features_audio = features_audio * 32768.0

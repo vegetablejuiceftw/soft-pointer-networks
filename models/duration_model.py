@@ -29,7 +29,7 @@ class MultyContextAttention(nn.Module):
         self.mode = "fast"
         # load(self, "/content/drive/My Drive/dataset/multy-attention-duration-derp2.pth", ignore=['pos_encode'])#, ignore='pos_encode;direct;out;shuffle'.split(';'))
         load(self, "/content/drive/My Drive/dataset/multy-attention-duration-normalized-3-[10-25].pth")
-        # load(self,  "/content/drive/My Drive/dataset/multy-attention-duration-final-[5-25].pth")
+        # load(self,  "/content/drive/My Drive/dataset/duration-final-[5-25].pth")
 
     def forward(self, input_sequence, mask, features_audio, masks_audio):
         batch_size, out_seq_len, *features = input_sequence.shape
@@ -161,4 +161,4 @@ if __name__ == '__main__':
     torch.cuda.empty_cache()
 
     # draw_duration(duration_combined_model, test_dataset, 36)
-    # export_model(duration_combined_model, "/content/drive/My Drive/dataset/multy-attention-duration-final-[5-25].pth")
+    # export_model(duration_combined_model, "/content/drive/My Drive/dataset/duration-final-[5-25].pth")
