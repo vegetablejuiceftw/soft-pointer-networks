@@ -1,4 +1,4 @@
-from dependencies import *
+from .dependencies import *
 
 BASE_PATH = '/content/TIMIT-PLUS'
 FULL_FODLER_PATH = join(BASE_PATH, 'data')

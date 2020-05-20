@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from components import Attention, Encoder, PositionalEncoding
-from models.base import ExportImportMixin, ModeSwitcherBase
+from .components import Attention, Encoder, PositionalEncoding
+from .base import ExportImportMixin, ModeSwitcherBase
 
 
 class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
@@ -75,7 +75,8 @@ class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
         batch, trans_len, seq_len = weights.shape
 
         if position_encodings:
-            position_encoding = self.pos_encode(torch.zeros(batch, seq_len, self.position_encoding_size))
+            position_encoding = self.pos_encode(
+                torch.zeros(batch, seq_len, self.position_encoding_size).to(self.device))
             positions = torch.bmm(weights, position_encoding)
             return positions[:, :-1]
 
