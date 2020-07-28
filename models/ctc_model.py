@@ -13,15 +13,15 @@ class MultyContextAttentionAudio(nn.Module):
         self.pos_encode = PositionalEncoding(vocab_size, dropout, scale=1)
 
         # self.encoder = Encoder(embedding_audio_size, embedding_audio_size, dropout=dropout, time_scale=None)
-        self.encoder = LightLSTM(embedding_audio_size, vocab_size, with_hidden=True).to(device)
-        self.fix_hidden = nn.Linear(self.encoder.hidden_size, hidden_size)
+        self.encoder_audio_initial = LightLSTM(embedding_audio_size, vocab_size, with_hidden=True).to(device)
+        self.fix_hidden = nn.Linear(self.encoder_audio_initial.hidden_size, hidden_size)
         # load(self.encoder, "/content/drive/My Drive/dataset/lstm-audio.pth")
 
         self.encoder_transcription = Encoder(
             hidden_size=hidden_size, embedding_size=embedding_transcription_size,
             num_layers=2, dropout=dropout, time_scale=None)
 
-        self.decoder_transcription = Decoder(
+        self.decoder_transcription_to_audio = Decoder(
             embedding_size=vocab_size, hidden_size=hidden_size, output_size=vocab_size,
             num_layers=2, dropout=dropout, time_scale=None)
 
@@ -29,7 +29,7 @@ class MultyContextAttentionAudio(nn.Module):
             hidden_size=hidden_size, embedding_size=embedding_audio_size,
             num_layers=2, dropout=dropout, time_scale=1)
 
-        self.decoder_audio = Decoder(
+        self.decoder_audio_to_audio = Decoder(
             embedding_size=vocab_size, hidden_size=hidden_size, output_size=hidden_size,
             num_layers=2, dropout=dropout, time_scale=1)
 
@@ -40,7 +40,7 @@ class MultyContextAttentionAudio(nn.Module):
         features_audio = features_audio * 32768.0
 
         # output_size=vocab_size
-        encoded_audio, hidden = self.encoder(features_transcription, mask_transcription, features_audio, mask_audio)
+        encoded_audio, hidden = self.encoder_audio_initial(features_transcription, mask_transcription, features_audio, mask_audio)
 
         if self.mode == "direct":
             return encoded_audio
@@ -54,7 +54,7 @@ class MultyContextAttentionAudio(nn.Module):
         # embedding_size = vocab_size,
         # hidden_size = hidden_size,
         # output_size = vocab_size,
-        output_combined, _ = self.decoder_transcription(
+        output_combined, _ = self.decoder_transcription_to_audio(
             encoded_audio,  # vocab_size
             mask_audio,
             hidden_transcription + hidden,
@@ -71,7 +71,7 @@ class MultyContextAttentionAudio(nn.Module):
             # embedding_size = vocab_size,
             # hidden_size = hidden_size,
             # output_size = hidden_size,
-            output_audio, hidden_audio = self.decoder_audio(
+            output_audio, hidden_audio = self.decoder_audio_to_audio(
                 output_combined,  # vocab_size
                 mask_audio,
                 hidden_audio,
