@@ -153,3 +153,26 @@ class Encoder(nn.Module):
 
         hidden = hidden[:2, :, :] + hidden[2:, :, :]
         return x, hidden
+
+
+class LightLSTM(nn.Module):
+    def __init__(self, feature_dim, out_dim, dropout_prob=0.05, with_hidden=False):
+        super().__init__()
+        self.batchnorm = nn.BatchNorm1d(feature_dim)
+        self.hidden_size = 128
+        self.rnn = nn.LSTM(feature_dim, self.hidden_size, batch_first=True, bidirectional=True, num_layers=2,
+                           dropout=dropout_prob)
+        self.fc = nn.Linear(self.hidden_size * 2, out_dim)
+        self.with_hidden = with_hidden
+
+    def forward(self, features, masks, features_audio, masks_audio):
+        x = features_audio
+        x = x.permute(0, 2, 1).contiguous()
+        x = self.batchnorm(x)
+        x = x.permute(0, 2, 1).contiguous()
+        x, (hidden, _) = self.rnn(x)
+        x = self.fc(x)
+        if self.with_hidden:
+            hidden = hidden[:2, :, :] + hidden[2:, :, :]
+            return x, hidden
+        return x

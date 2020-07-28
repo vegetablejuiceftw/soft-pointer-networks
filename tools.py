@@ -565,27 +565,28 @@ def show_position_batched(model, dataset, duration_combined_model=None, report_e
     for pdur, pid in zip(diff, label_ids):
         phoneme_map[pid].append(abs(pdur))
 
-    for func in [np.max, np.mean]:
-        print(func)
-        mean_phoneme_dur = sorted([[f"{KNOWN_LABELS[pid].ljust(4)}", func(val)] for pid, val in phoneme_map.items()],
-                                  key=lambda x: x[1])
-        print(len(mean_phoneme_dur))
-        for row in zip(mean_phoneme_dur[::5], mean_phoneme_dur[1::5], mean_phoneme_dur[2::5], mean_phoneme_dur[3::5],
-                       mean_phoneme_dur[4::5]):
-            for i, (p, c) in enumerate(row):
+    if plotting:
+        for func in [np.max, np.mean]:
+            print(func)
+            mean_phoneme_dur = sorted([[f"{KNOWN_LABELS[pid].ljust(4)}", func(val)] for pid, val in phoneme_map.items()],
+                                    key=lambda x: x[1])
+            print(len(mean_phoneme_dur))
+            for row in zip(mean_phoneme_dur[::5], mean_phoneme_dur[1::5], mean_phoneme_dur[2::5], mean_phoneme_dur[3::5],
+                        mean_phoneme_dur[4::5]):
+                for i, (p, c) in enumerate(row):
+                    print(f"{p} {c:5.2f}ms".ljust(20), end="", sep="")
+                print()
+            for i, (p, c) in enumerate(mean_phoneme_dur[-4:]):
                 print(f"{p} {c:5.2f}ms".ljust(20), end="", sep="")
-            print()
-        for i, (p, c) in enumerate(mean_phoneme_dur[-4:]):
-            print(f"{p} {c:5.2f}ms".ljust(20), end="", sep="")
-        print("\n.")
-        figure()
-        plt.plot(*zip(*[[len(val), func(val)] for pid, val in phoneme_map.items()]), 'wo')
-        for pid, val in phoneme_map.items():
-            plt.annotate(KNOWN_LABELS[pid], xy=(len(val), func(val)))
-        plt.xlabel('Occurence count', fontsize=13)
-        plt.ylabel(f'Mean error' if func is np.mean else "Max error", fontsize=13)
-        plt.gca().yaxis.set_major_formatter(FormatStrFormatter('%dms'))
-        plt.show()
+            print("\n.")
+            figure()
+            plt.plot(*zip(*[[len(val), func(val)] for pid, val in phoneme_map.items()]), 'wo')
+            for pid, val in phoneme_map.items():
+                plt.annotate(KNOWN_LABELS[pid], xy=(len(val), func(val)))
+            plt.xlabel('Occurence count', fontsize=13)
+            plt.ylabel(f'Mean error' if func is np.mean else "Max error", fontsize=13)
+            plt.gca().yaxis.set_major_formatter(FormatStrFormatter('%dms'))
+            plt.show()
 
     print("TOTAL", np.abs(diff).sum())
     display_diff(diff, "position", plotting=plotting)
