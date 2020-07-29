@@ -56,8 +56,12 @@ class ExportImportMixin:
         model_dict = self.state_dict()
         pretrained_dict = torch.load(path, map_location=next(self.parameters()).device)
         # 1. filter out unnecessary keys
-        pretrained_dict = {k: v for k, v in pretrained_dict.items() if
-                           k in model_dict and (not ignore or not any((i in k) for i in ignore))}
+        pretrained_dict = {
+            k: v
+            for k, v in pretrained_dict.items()
+            if k in model_dict and (not ignore or all(i not in k for i in ignore))
+        }
+
         # 2. overwrite entries in the existing state dict
         model_dict.update(pretrained_dict)
         # 3. load the new state dict

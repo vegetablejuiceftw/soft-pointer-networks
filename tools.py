@@ -44,11 +44,10 @@ def generate_duration_transcription(transcriptions: np.ndarray, durations: np.nd
         adj_dur = duration / ms_per_step
 
         steps = max((adj_dur).round().item(), 1)
-        for i in range(int(steps)):
+        for _ in range(int(steps)):
             stack.append(feature)
 
-    transcription_with_duration = np.vstack(stack)
-    return transcription_with_duration
+    return np.vstack(stack)
 
 
 def find_borders_pathed(path: list, original_mapping: list):
@@ -101,7 +100,6 @@ def evaluate_result(model, iterator, lower=True, duration_model=None):
 
         for i in range(batch_s):
             idx = batch.index[i]
-            key = batch.key[i]
             length = batch.labels.lengths[i].cpu().detach().numpy()
             transcription = batch.transcription[i].cpu().detach().numpy()
 
@@ -113,6 +111,7 @@ def evaluate_result(model, iterator, lower=True, duration_model=None):
             truth = batch.label_vec[i].cpu().detach().numpy()
 
             if duration_model:
+                key = batch.key[i]
                 if key in duration_cache:
                     cache_hits += 1
                     transcription = duration_cache[key]
@@ -379,10 +378,10 @@ def show_position(model, dataset, duration_combined_model=None, sample_size=2000
         length = audio.shape[0] + 0
         borders_predicted = model(transcription.unsqueeze(0), None, audio.unsqueeze(0), None)[0]
 
+        prev = 0
         if duration_combined_model is None:
             new = borders_predicted.detach().cpu().numpy() * ms_per_step
             switched = False
-            prev = 0
             for i, v in enumerate(new):
                 if abs(v - prev) > 500 or v < prev:
                     after = new[i + 1] if i + 1 < len(new) else prev
@@ -390,13 +389,11 @@ def show_position(model, dataset, duration_combined_model=None, sample_size=2000
                     switched = True
                 new[i] = v
                 prev = v
-            b = new
         else:
             duration = None
             prediction_position = borders_predicted.detach().cpu().numpy() * ms_per_step
             new = prediction_position.copy()
             switched = False
-            prev = 0
             for i, v in enumerate(new):
                 after = new[i + 1] if i + 1 < len(new) else v
                 if v < prev or v > after:
@@ -408,8 +405,7 @@ def show_position(model, dataset, duration_combined_model=None, sample_size=2000
                     switched = True
                 new[i] = v
                 prev = v
-            b = new
-
+        b = new
         diff = (border.detach().cpu().numpy() * ms_per_step - b)
         if np.abs(diff).max() > report_error:
             print(f"[id:{idx:3d}]  [{diff.min():5.0f} {diff.max():5.0f}]  {length:4d} {switched}")
@@ -435,7 +431,7 @@ def location_fix(positions, truth, durations, end_of_audio):
         worst_diff, worst_index = 0, 0
         for i, v in enumerate(positions):
             if i in visited: continue
-            prev = positions[i - 1] if i - 1 >= 0 else 0
+            prev = positions[i - 1] if i >= 1 else 0
             after = positions[i + 1] if i + 1 < len(positions) else end_of_audio
             Y = (prev + after - 0.0001) / 2
             Y = prev + durations[i]
@@ -450,14 +446,10 @@ def location_fix(positions, truth, durations, end_of_audio):
 
         i = worst_index
         v = positions[i]
-        prev = positions[i - 1] if i - 1 >= 0 else 0
+        prev = positions[i - 1] if i >= 1 else 0
         after = positions[i + 1] if i + 1 < len(positions) else end_of_audio
 
-        if prev < after:
-            v = (prev + after - 0.0001) / 2
-        else:
-            v = prev + 0.001
-
+        v = (prev + after - 0.0001) / 2 if prev < after else prev + 0.001
         positions[worst_index] = v
 
     prev = 0
@@ -468,12 +460,8 @@ def location_fix(positions, truth, durations, end_of_audio):
             switched = True
             after = positions[i + 1] if i + 1 < len(positions) else prev + 0.01
 
-            if v < prev:
-                if prev < after:
-                    v = (prev + after - 0.0001) / 2
-                else:
-                    v = prev + 0.001
-
+        if v < prev:
+            v = (prev + after - 0.0001) / 2 if prev < after else prev + 0.001
         positions[i] = v
         prev = v
 
@@ -538,11 +526,8 @@ def show_position_batched(model, dataset, duration_combined_model=None, report_e
                     if duration_combined_model is not None:
                         v = after - duration[i - 1]
 
-                    if v < prev:
-                        if prev < after:
-                            v = (prev + after - 0.0001) / 2
-                        else:
-                            v = prev + 0.001
+                if v < prev:
+                    v = (prev + after - 0.0001) / 2 if prev < after else prev + 0.001
                 b[i] = v
                 prev = v
 

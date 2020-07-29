@@ -11,8 +11,7 @@ class AudioCaching:
         filename = os.path.basename(file_path)
         cache_filename = f"[{'__'.join(str(k) for k in key)}]{filename}"
         cache_path = os.path.dirname(file_path).replace(cls.BASE_FOLDER, cls.CACHE_FOLDER)
-        cache_file_path = os.path.join(cache_path, cache_filename)
-        return cache_file_path
+        return os.path.join(cache_path, cache_filename)
 
     @classmethod
     def set(cls, file_path, key, audio):
@@ -34,8 +33,7 @@ class AudioCaching:
 
     @classmethod
     def load(cls, file_path):
-        audio = sf.read(file_path)[0]
-        return audio
+        return sf.read(file_path)[0]
 
 
 class UtteranceBatch(NamedTuple):
@@ -139,8 +137,7 @@ class DirectMaskDataset(Dataset):
         # print(f'There are {nRow} rows and {nCol} columns')
         A, B = df.loc[phn_mask].path_from_data_dir, df.loc[audio_mask].path_from_data_dir
         assert len(A) == len(B)
-        files = list(zip(A, B))
-        return files
+        return list(zip(A, B))
 
     @staticmethod
     def get_name(file_name):
