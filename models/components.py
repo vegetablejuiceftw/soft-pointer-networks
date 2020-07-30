@@ -1,8 +1,9 @@
 import math
+from typing import Optional
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+import torch.nn.functional as fun
 
 
 class PositionalEncoding(nn.Module):
@@ -21,7 +22,7 @@ class PositionalEncoding(nn.Module):
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
 
-        # todo: The default behavior for interpolate/upsample with float scale_factor will change in 1.6.0
+        # todo: The default behavior for interpolate/up sample with float scale_factor will change in 1.6.0
         m = nn.Upsample(scale_factor=(1. / scale, 1), mode='bilinear', align_corners=True)
 
         shape = pe.shape
@@ -60,15 +61,9 @@ class Attention(nn.Module):
         - **attn** (batch, output_len, input_len): tensor containing attention weights.
     Attributes:
         linear_out (torch.nn.Linear): applies a linear transformation to the incoming data: :math:`y = Ax + b`.
-        mask (torch.Tensor, optional): applies a :math:`-inf` to the indices specified in the `Tensor`.
-    Examples::
-         >>> attention = seq2seq.models.Attention(256)
-         >>> context = Variable(torch.randn(5, 3, 256))
-         >>> output = Variable(torch.randn(5, 5, 256))
-         >>> output, attn = attention(output, context)
     """
 
-    def __init__(self, dim):
+    def __init__(self, dim: Optional[int] = None):
         super(Attention, self).__init__()
         self.dim = dim
         if self.dim:
@@ -91,7 +86,7 @@ class Attention(nn.Module):
 
             attn.data.masked_fill_(~mask_context.unsqueeze(1), -float('inf'))
 
-        attn = F.softmax(attn.view(-1, input_size), dim=1).view(batch_size, -1, input_size)
+        attn = fun.softmax(attn.view(-1, input_size), dim=1).view(batch_size, -1, input_size)
         if not self.dim:
             return attn
 
@@ -116,13 +111,13 @@ class Decoder(nn.Module):
 
         self.pos_encode = PositionalEncoding(hidden_size, dropout, scale=time_scale)
 
-    def forward(self, previous, mask_trans, hidden_state, encoder_outputs, mask_audio):
-        rnn_output, hidden_state = self.gru(previous, hidden_state)
+    def forward(self, carrier, mask_trans, hidden_state, context, mask_audio):
+        rnn_output, hidden_state = self.gru(carrier, hidden_state)
         rnn_output = self.pos_encode(rnn_output)
 
-        output, attn = self.attn(rnn_output, mask_trans, encoder_outputs, mask_audio)
-        output = self.out(output)
-        return output, hidden_state
+        rnn_output, attn = self.attn(rnn_output, mask_trans, context, mask_audio)
+        rnn_output = self.out(rnn_output)
+        return rnn_output, hidden_state
 
 
 class Encoder(nn.Module):
@@ -132,7 +127,7 @@ class Encoder(nn.Module):
         self.embedding_size = embedding_size
         self.num_layers = num_layers
         self.dropout = dropout
-        self.batchnorm = nn.BatchNorm1d(embedding_size)
+        self.batch_norm = nn.BatchNorm1d(embedding_size)
         # Embedding layer that will be shared with Decoder
         self.gru = nn.GRU(embedding_size, hidden_size, num_layers=num_layers, dropout=dropout, bidirectional=True,
                           batch_first=True)
@@ -140,9 +135,9 @@ class Encoder(nn.Module):
 
         self.pos_encode = PositionalEncoding(out_dim or hidden_size, dropout, scale=time_scale)
 
-    def forward(self, x, *ignore, skip_pos_encode=False):
+    def forward(self, x, *, skip_pos_encode=False):
         x = x.permute(0, 2, 1).contiguous()
-        x = self.batchnorm(x)
+        x = self.batch_norm(x)
         x = x.permute(0, 2, 1).contiguous()
         x, hidden = self.gru(x)
         # remove bi directional artifacts
@@ -158,17 +153,18 @@ class Encoder(nn.Module):
 class LightLSTM(nn.Module):
     def __init__(self, feature_dim, out_dim, dropout_prob=0.05, with_hidden=False):
         super().__init__()
-        self.batchnorm = nn.BatchNorm1d(feature_dim)
+        self.batch_norm = nn.BatchNorm1d(feature_dim)
         self.hidden_size = 128
-        self.rnn = nn.LSTM(feature_dim, self.hidden_size, batch_first=True, bidirectional=True, num_layers=2,
-                           dropout=dropout_prob)
+        self.rnn = nn.LSTM(
+            feature_dim, self.hidden_size,
+            batch_first=True, bidirectional=True, num_layers=2, dropout=dropout_prob)
         self.fc = nn.Linear(self.hidden_size * 2, out_dim)
         self.with_hidden = with_hidden
 
-    def forward(self, features, masks, features_audio, masks_audio):
+    def forward(self, _features, _masks, features_audio, _masks_audio):
         x = features_audio
         x = x.permute(0, 2, 1).contiguous()
-        x = self.batchnorm(x)
+        x = self.batch_norm(x)
         x = x.permute(0, 2, 1).contiguous()
         x, (hidden, _) = self.rnn(x)
         x = self.fc(x)

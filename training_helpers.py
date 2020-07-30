@@ -277,9 +277,7 @@ class MaskedL1(nn.Module):
     def forward(self, pred, target, mask):
         pred = torch.mul(pred, mask)
         target = torch.mul(target, mask)
-        l1 = self.l1(pred, target)
-
-        return l1
+        return self.l1(pred, target)
 
 
 class MaskedThing(nn.Module):
@@ -291,6 +289,4 @@ class MaskedThing(nn.Module):
         target = torch.log1p(F.relu(target))
         pred = torch.mul(pred, mask)
         target = torch.mul(target, mask)
-        l1 = self.mse(pred, target)
-
-        return l1
+        return self.mse(pred, target)
