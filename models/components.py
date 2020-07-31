@@ -127,7 +127,7 @@ class Encoder(nn.Module):
         self.embedding_size = embedding_size
         self.num_layers = num_layers
         self.dropout = dropout
-        self.batch_norm = nn.BatchNorm1d(embedding_size)
+        self.batchnorm = nn.BatchNorm1d(embedding_size)
         # Embedding layer that will be shared with Decoder
         self.gru = nn.GRU(embedding_size, hidden_size, num_layers=num_layers, dropout=dropout, bidirectional=True,
                           batch_first=True)
@@ -137,7 +137,7 @@ class Encoder(nn.Module):
 
     def forward(self, x, *, skip_pos_encode=False):
         x = x.permute(0, 2, 1).contiguous()
-        x = self.batch_norm(x)
+        x = self.batchnorm(x)
         x = x.permute(0, 2, 1).contiguous()
         x, hidden = self.gru(x)
         # remove bi directional artifacts
@@ -153,7 +153,7 @@ class Encoder(nn.Module):
 class LightLSTM(nn.Module):
     def __init__(self, feature_dim, out_dim, dropout_prob=0.05, with_hidden=False):
         super().__init__()
-        self.batch_norm = nn.BatchNorm1d(feature_dim)
+        self.batchnorm = nn.BatchNorm1d(feature_dim)
         self.hidden_size = 128
         self.rnn = nn.LSTM(
             feature_dim, self.hidden_size,
@@ -164,7 +164,7 @@ class LightLSTM(nn.Module):
     def forward(self, _features, _masks, features_audio, _masks_audio):
         x = features_audio
         x = x.permute(0, 2, 1).contiguous()
-        x = self.batch_norm(x)
+        x = self.batchnorm(x)
         x = x.permute(0, 2, 1).contiguous()
         x, (hidden, _) = self.rnn(x)
         x = self.fc(x)
