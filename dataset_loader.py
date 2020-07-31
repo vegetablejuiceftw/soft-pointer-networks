@@ -44,7 +44,9 @@ class UtteranceBatch(NamedTuple):
 
 class Utterance(NamedTuple):
     features: torch.tensor
+    features_mfcc: torch.tensor
     labels: torch.tensor
+    transcription_int: torch.tensor
     transcription: torch.tensor
     label_vec: torch.tensor
     out_map: List
@@ -149,7 +151,7 @@ class DirectMaskDataset(Dataset):
         return [np.array([MAP_LABELS[tag][0] for tag in tags]) for tags in arr]
 
     def process_audio(self, labels: list, length: int, step: float) -> List[List]:
-        tag_ints, tag_vecs, tag_mapping, transcription = [], [], [], []
+        tag_ints, tag_vecs, tag_mapping, transcription, transcription_ints = [], [], [], [], []
 
         current, prev = 0, None
         for end_ms, tag in labels:
@@ -166,7 +168,7 @@ class DirectMaskDataset(Dataset):
 
             unholy_combination = prev in NO_BORDER_MAPPING and tag in NO_BORDER_MAPPING
             # if unholy_combination:
-                # unholy.add((prev, tag))
+            # unholy.add((prev, tag))
 
             if prev == tag and MERGE_DOUBLES or unholy_combination or q_tag:
                 tag_id, ems = tag_mapping[-1]
@@ -178,6 +180,7 @@ class DirectMaskDataset(Dataset):
 
                 tag_mapping.append((tag_id, end_ms))
                 transcription.append(tag_vec)
+                transcription_ints.append(tag_id)
 
             prev = tag  # handle same tag occurence
 
@@ -194,7 +197,7 @@ class DirectMaskDataset(Dataset):
             tag_ints.append(tag_id)
             tag_vecs.append(tag_vec)
 
-        return tag_ints, tag_vecs, tag_mapping, transcription
+        return tag_ints, tag_vecs, tag_mapping, transcription, transcription_ints
 
     @classmethod
     def get_set(cls, key, func):
@@ -215,8 +218,8 @@ class DirectMaskDataset(Dataset):
         if limit is not None:
             files = files[:limit]
 
-        inp, out_vec, out_int, out_map, out_dur, out_trans = [], [], [], [], [], []
-        position, border, weight = [], [], []
+        inp, out_vec, out_int, out_map, out_dur, out_trans, out_trans_ints = [], [], [], [], [], [], []
+        position, border, weight, inp_mfcc = [], [], [], []
 
         duplicate_set = set()
         self.files = []
@@ -236,6 +239,10 @@ class DirectMaskDataset(Dataset):
             audio = self.get_set(audio_file, loader)
             audio_scaling, rate = 32768. / 512, 16000
             audio_base_len = len(audio)
+
+            meter = pyln.Meter(rate)  # create BS.1770 meter
+            loudness = meter.integrated_loudness(audio)
+            audio = pyln.normalize.loudness(audio, loudness, -40.0)
 
             stretch = 1
             pure_key = (audio_file, "pure_key")
@@ -277,8 +284,12 @@ class DirectMaskDataset(Dataset):
 
             fbank_feat = logfbank(audio, rate, winlen=WIN_SIZE, winstep=WIN_STEP,
                                   nfilt=INPUT_SIZE)  # TODO: remove scaling
+            mfcc_feat = mfcc(audio, rate, winlen=WIN_SIZE, winstep=WIN_STEP,
+                             nfilt=32, numcep=16)  # TODO: remove scaling
+
             # some audio instances are too short for the audio transcription and the winlen cut :(
             fbank_feat = np.vstack([fbank_feat] + [fbank_feat[-1]] * 10)
+            mfcc_feat = np.vstack([mfcc_feat] + [mfcc_feat[-1]] * 10)
 
             step_size = (WIN_STEP * 1000)
             with open(label_file) as f:
@@ -296,8 +307,11 @@ class DirectMaskDataset(Dataset):
 
                 length = int((end_ms / step_size))
 
-            tag_ints, tag_vecs, tag_mapping, transcription = self.process_audio(labels, length, step_size)
+            tag_ints, tag_vecs, tag_mapping, transcription, transcription_ints = self.process_audio(labels, length,
+                                                                                                    step_size)
             fbank_feat = fbank_feat[:len(tag_ints)]
+            mfcc_feat = mfcc_feat[:len(tag_ints)]
+
             length = fbank_feat.shape[0]
             length_ms = length * step_size
 
@@ -334,9 +348,13 @@ class DirectMaskDataset(Dataset):
 
                 out_dur.append(tag_duration)
                 inp.append(fbank_feat)
+                inp_mfcc.append(mfcc_feat)
                 out_vec.append(tag_vecs)
                 out_int.append(tag_ints)
+
                 out_trans.append(transcription)
+                out_trans_ints.append(transcription_ints)
+
                 out_map.append(tag_mapping)
                 self.files.append((label_file, audio_file))
             else:
@@ -344,9 +362,13 @@ class DirectMaskDataset(Dataset):
                     f"[ERROR] len not match {length} != {len(tag_vecs)} != {len(tag_ints)} \n\t - {label_file}\n\t - {audio_file}")
 
         self.inp = stack(inp, torch.FloatTensor)
+        self.inp_mfcc = stack(inp_mfcc, torch.FloatTensor)
+
         self.out_vec = stack(out_vec, torch.FloatTensor)
         self.out_int = stack(out_int, torch.LongTensor)
         self.transcription = stack(out_trans, torch.FloatTensor)
+        self.transcription_int = stack(out_trans_ints, torch.LongTensor)
+
         self.out_map = out_map
         self.out_duration = stack(out_dur, torch.FloatTensor)
         self.in_transcription = stack(out_trans, torch.FloatTensor)
@@ -356,7 +378,9 @@ class DirectMaskDataset(Dataset):
         self.weight = stack(weight, torch.FloatTensor)
 
         FEATURES = RawField(postprocessing=self.features_batch_process)
+        FEATURES_MFCC = RawField(postprocessing=self.features_batch_process)
         LABEL = RawField(postprocessing=self.features_batch_process)
+        TRANSCRIPTION_INT = RawField(postprocessing=self.features_batch_process)
         TRANSCRIPTION = RawField()
         LABEL_VEC = RawField()
         OUT_MAP = RawField()
@@ -369,9 +393,11 @@ class DirectMaskDataset(Dataset):
         WEIGHT = RawField(postprocessing=self.features_batch_process)
 
         setattr(FEATURES, "is_target", False)
+        setattr(FEATURES_MFCC, "is_target", False)
         setattr(LABEL_VEC, "is_target", False)
         setattr(OUT_MAP, "is_target", False)
         setattr(TRANSCRIPTION, "is_target", False)
+        setattr(TRANSCRIPTION_INT, "is_target", False)
         setattr(OUT_DUR, "is_target", False)
         setattr(IN_TRANS, "is_target", False)
         setattr(LABEL, "is_target", True)
@@ -383,8 +409,10 @@ class DirectMaskDataset(Dataset):
 
         self.fields = {
             "features": FEATURES,
+            "features_mfcc": FEATURES_MFCC,
             "labels": LABEL,
             "transcription": TRANSCRIPTION,
+            "transcription_int": TRANSCRIPTION_INT,
             "label_vec": LABEL_VEC,
             "out_map": OUT_MAP,
             "out_duration": OUT_DUR,
@@ -402,7 +430,10 @@ class DirectMaskDataset(Dataset):
     def __getitem__(self, idx) -> Utterance:
         label_file, audio_file = self.files[idx]
         return Utterance(
-            self.inp[idx], self.out_int[idx], self.transcription[idx], self.out_vec[idx],
+            self.inp[idx], self.inp_mfcc[idx],
+            self.out_int[idx], self.transcription_int[idx],
+            self.transcription[idx], self.out_vec[idx],
+
             self.out_map[idx],
             self.out_duration[idx], self.in_transcription[idx],
             self.position[idx], self.border[idx], self.weight[idx],
