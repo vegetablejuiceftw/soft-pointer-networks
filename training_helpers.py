@@ -1,4 +1,50 @@
-from .dependencies import *
+import contextlib
+import cProfile
+import gc
+import json
+import math
+import os
+import random
+import sys
+import uuid
+from collections import Counter, OrderedDict, defaultdict, namedtuple
+from itertools import chain
+from os.path import join
+from pprint import pprint
+from random import Random, choice, sample
+from time import sleep
+from typing import List, NamedTuple
+
+import IPython.display as ipd
+import matplotlib.pyplot as plt
+import numpy as np
+import scipy.io.wavfile as wavfile
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from google.colab import drive
+from IPython.display import Audio, Image, display
+from matplotlib import cm, gridspec
+from matplotlib.pyplot import figure
+from matplotlib.ticker import FormatStrFormatter
+from numpy import dot
+from numpy.linalg import norm
+from torch.utils.data import DataLoader, Dataset
+
+import librosa
+import pandas as pd
+import pyrubberband as pyrb
+import soundfile as sf
+from dtaidistance import dtw as dtaidtw
+from dtaidistance.dtw_ndim import warping_paths
+from dtw import accelerated_dtw as adtw
+from dtw import dtw
+from fastdtw import dtw as slowdtw
+from fastdtw import fastdtw
+from python_speech_features import logfbank, mfcc
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from torchtext.data import BucketIterator, Field, RawField
 
 
 class MaskedLoss(nn.Module):
@@ -41,6 +87,7 @@ class LabelSmoothingLossAudio(nn.Module):
 class PositionShuffleLoss(nn.Module):
     mse = nn.MSELoss()
     cos = nn.CosineSimilarity(dim=2, eps=1e-6)
+
     # w = torch.FloatTensor([min(1.05 ** i, 10) for i in range(POS_DIM)]).to(device)
 
     def forward(self, pred, target, mask):
@@ -52,13 +99,15 @@ class PositionShuffleLoss(nn.Module):
         # elif idx == 1:
         # return self.mse(pred * self.w, target * self.w)
         elif idx == 2:
-            return self.mse(pred, target) * (2. - self.cos(pred, target)).mean()
+            return self.mse(pred,
+                            target) * (2.0 - self.cos(pred, target)).mean()
         else:
-            return (1. - self.cos(pred, target)).mean()
+            return (1.0 - self.cos(pred, target)).mean()
 
 
 class PositionMSELoss(nn.Module):
     mse = nn.MSELoss()
+
     # w = torch.FloatTensor([min(1.05 ** i, 10) for i in range(POS_DIM)]).to(device)
 
     def forward(self, pred, target, mask):
@@ -77,7 +126,7 @@ class CosineLoss(nn.Module):
 
     def forward(self, pred, target, mask):
         pred = torch.mul(pred, mask.unsqueeze(2))
-        return (1. - self.cos(pred, target)).mean()
+        return (1.0 - self.cos(pred, target)).mean()
 
 
 class MaskedMSE(nn.Module):
@@ -103,7 +152,7 @@ class MaskedSoftL1(nn.Module):
 class LabelSmoothingLossAudio(nn.Module):
     def __init__(self, classes, smoothing=0.0, dim=-1):
         super().__init__()
-        assert (smoothing >= 0.0 and smoothing <= 1.0)
+        assert smoothing >= 0.0 and smoothing <= 1.0
 
         self.confidence = 1.0 - smoothing
         self.smoothing = smoothing
@@ -123,7 +172,8 @@ class LabelSmoothingLossAudio(nn.Module):
         return torch.mean(torch.sum(-true_dist * pred, dim=self.dim))
 
 
-def position_encode_trainer(batch: 'UtteranceBatch', model: nn.Module, loss_function: nn.Module):
+def position_encode_trainer(batch: "UtteranceBatch", model: nn.Module,
+                            loss_function: nn.Module):
     features_audio = batch.features.padded
     masks_audio = batch.features.masks
     features = batch.in_transcription.padded
@@ -135,7 +185,8 @@ def position_encode_trainer(batch: 'UtteranceBatch', model: nn.Module, loss_func
     return loss_function(result, target, target_mask)
 
 
-def position_gradient_trainer(batch: 'UtteranceBatch', model: nn.Module, loss_function: nn.Module):
+def position_gradient_trainer(batch: "UtteranceBatch", model: nn.Module,
+                              loss_function: nn.Module):
     features_audio = batch.features.padded
     masks_audio = batch.features.masks
     features = batch.in_transcription.padded
@@ -148,14 +199,16 @@ def position_gradient_trainer(batch: 'UtteranceBatch', model: nn.Module, loss_fu
     return loss_function(result, target, target_mask, batch.weight.padded)
 
 
-def audio_detection_trainer(batch: 'UtteranceBatch', model: nn.Module, loss_function: nn.Module):
+def audio_detection_trainer(batch: "UtteranceBatch", model: nn.Module,
+                            loss_function: nn.Module):
     features_audio = batch.features.padded
     masks_audio = batch.features.masks
     features_transcription = batch.in_transcription.padded
     masks_transcription = batch.in_transcription.masks
     target = batch.labels.padded
 
-    result = model(features_transcription, masks_transcription, features_audio, masks_audio)
+    result = model(features_transcription, masks_transcription, features_audio,
+                   masks_audio)
 
     batch_s, time_s, feat_s = result.shape
     # "flatten" all logits and targets by putting all subsequences together
@@ -166,7 +219,8 @@ def audio_detection_trainer(batch: 'UtteranceBatch', model: nn.Module, loss_func
     return loss_function(flattened_result, flattened_targets, flattened_masks)
 
 
-def duration_trainer(batch: 'UtteranceBatch', model: nn.Module, loss_function: nn.Module):
+def duration_trainer(batch: "UtteranceBatch", model: nn.Module,
+                     loss_function: nn.Module):
     features_audio = batch.features.padded
     masks_audio = batch.features.masks
     features = batch.in_transcription.padded
@@ -179,13 +233,27 @@ def duration_trainer(batch: 'UtteranceBatch', model: nn.Module, loss_function: n
     return loss_function(result.squeeze(2), target, target_mask)
 
 
-def train(model, num_epochs, data_iter, eval_iter=None, loss_function=CosineLoss(),
-          train_function=position_encode_trainer, lr_decay=0.9, lr=0.001, weight_decay=1e-5, repreat=0):
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+def train(
+    model,
+    num_epochs,
+    data_iter,
+    eval_iter=None,
+    loss_function=CosineLoss(),
+    train_function=position_encode_trainer,
+    lr_decay=0.9,
+    lr=0.001,
+    weight_decay=1e-5,
+    repreat=0,
+):
+    optimizer = torch.optim.Adam(model.parameters(),
+                                 lr=lr,
+                                 weight_decay=weight_decay)
     # optimizer = torch.optim.ASGD(model.parameters(), lr=lr, weight_decay=weight_decay)
     print(optimizer)
 
-    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=lr_decay)
+    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
+                                                   step_size=1,
+                                                   gamma=lr_decay)
     eval_iter = eval_iter or data_iter
     eval_iter = [eval_iter] if type(eval_iter) is not list else eval_iter
 
@@ -193,7 +261,8 @@ def train(model, num_epochs, data_iter, eval_iter=None, loss_function=CosineLoss
         for e_iter in eval_iter:
             train_acc = evaluate(model, e_iter, train_function, loss_function)
 
-        print("Starting epoch %d, learning rate is %f" % (epoch, lr_scheduler.get_lr()[0]))
+        print("Starting epoch %d, learning rate is %f" %
+              (epoch, lr_scheduler.get_lr()[0]))
         errors = []
         for batch in data_iter:
             model.zero_grad()
@@ -224,16 +293,21 @@ def train(model, num_epochs, data_iter, eval_iter=None, loss_function=CosineLoss
         train_acc = evaluate(model, e_iter, train_function, loss_function)
 
 
-def evaluate(model, data_iter, train_function=position_encode_trainer, loss_function=CosineLoss()):
+def evaluate(model,
+             data_iter,
+             train_function=position_encode_trainer,
+             loss_function=CosineLoss()):
     model.eval()
     total_loss = 0
     size = 0
     with torch.no_grad():
         for batch in data_iter:
-            total_loss += abs(train_function(batch, model, loss_function).item())
+            total_loss += abs(
+                train_function(batch, model, loss_function).item())
             size += 1
     print(
-        f"  Evaluation[{getattr(data_iter, 'prefix', '')}] - avg_loss: {total_loss / size:.7f} count:{size} Total loss:{total_loss:.7f}")
+        f"  Evaluation[{getattr(data_iter, 'prefix', '')}] - avg_loss: {total_loss / size:.7f} count:{size} Total loss:{total_loss:.7f}"
+    )
 
 
 class DivMaskedMSE(nn.Module):

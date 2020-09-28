@@ -1,2 +1,11 @@
-isort
 torch
+
+# quality
+PyYAML==5.3.1
+black==19.10b0
+isort==4.*
+prospector==1.*
+yapf
+autopep8
+flynt==0.52
+autoflake

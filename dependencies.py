@@ -22,6 +22,7 @@ import scipy.io.wavfile as wavfile
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from google.colab import drive
 from IPython.display import Audio, Image, display
 from matplotlib import cm, gridspec
 from matplotlib.pyplot import figure
@@ -40,7 +41,6 @@ from dtw import accelerated_dtw as adtw
 from dtw import dtw
 from fastdtw import dtw as slowdtw
 from fastdtw import fastdtw
-from google.colab import drive
 from python_speech_features import logfbank, mfcc
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
