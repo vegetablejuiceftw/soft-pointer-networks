@@ -428,10 +428,10 @@ def show_duration(model, dataset, sample_size=2000):
         inp = dataset[i].in_transcription
         inp_audio = dataset[i].features
 
-        out = (dataset[i].out_duration * DURATION_SCALER
-               )  # durations have been scaled with DURATION_SCALER
-        res = (model.forward(inp.view(1, *inp.shape), None,
-                             inp_audio.unsqueeze(0), None) * DURATION_SCALER)
+        out = dataset[
+            i].out_duration * DURATION_SCALER  # durations have been scaled with DURATION_SCALER
+        res = model.forward(inp.view(1, *inp.shape), None,
+                            inp_audio.unsqueeze(0), None) * DURATION_SCALER
 
         resc = torch.cumsum(res, dim=1).view(-1)
         res = res.detach().view(-1).cpu().numpy()
@@ -647,8 +647,9 @@ def show_position_batched(model,
                 v = b[i]
                 if v < prev:
                     switched = True
-                    after = (b[i + 1] if i + 1 < len(b) else end_of_audio
-                             )  # prev + 0.01 # end of file? end_of_audio
+                    after = b[i + 1] if i + 1 < len(
+                        b
+                    ) else end_of_audio  # prev + 0.01 # end of file? end_of_audio
                     if duration_combined_model is not None:
                         v = after - duration[i - 1]
 
@@ -744,8 +745,8 @@ def explore_inherit_border_error(dataset):
                 diffs.append(d)
             except Exception as e:
                 print(e)
-                arr = ((np.where(original_ids[:-1] != original_ids[1:])[0] +
-                        0.5) * WIN_STEP * 1000)
+                arr = (np.where(original_ids[:-1] != original_ids[1:])[0] +
+                       0.5) * WIN_STEP * 1000
                 last = original_ids.shape[0] * WIN_STEP * 1000
                 arr = np.append(arr, last)
                 print(

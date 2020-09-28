@@ -1,9 +1,8 @@
 import random
 
 import torch
-import torch.nn as nn
+from torch import nn
 import torch.nn.functional as F
-
 
 
 class MaskedLoss(nn.Module):
@@ -22,7 +21,7 @@ class MaskedLoss(nn.Module):
         return self.mse(pred, target)
 
 
-class LabelSmoothingLossAudio(nn.Module):
+class LabelSmoothingLossAudioOld(nn.Module):
     def __init__(self, classes, smoothing=0.0, dim=-1):
         super().__init__()
         self.confidence = 1.0 - smoothing
@@ -57,11 +56,10 @@ class PositionShuffleLoss(nn.Module):
             return self.mse(pred, target)
         # elif idx == 1:
         # return self.mse(pred * self.w, target * self.w)
-        elif idx == 2:
+        if idx == 2:
             return self.mse(pred,
                             target) * (2.0 - self.cos(pred, target)).mean()
-        else:
-            return (1.0 - self.cos(pred, target)).mean()
+        return (1.0 - self.cos(pred, target)).mean()
 
 
 class PositionMSELoss(nn.Module):
@@ -108,7 +106,7 @@ class MaskedSoftL1(nn.Module):
         return self.loss(pred / self.factor, target / self.factor)
 
 
-class LabelSmoothingLossAudio(nn.Module):
+class LabelSmoothingLossAudioOld(nn.Module):
     def __init__(self, classes, smoothing=0.0, dim=-1):
         super().__init__()
         assert smoothing >= 0.0 and smoothing <= 1.0
@@ -323,3 +321,8 @@ class MaskedThing(nn.Module):
         pred = torch.mul(pred, mask)
         target = torch.mul(target, mask)
         return self.mse(pred, target)
+
+
+variable_thing_Long_is_1 = 1
+print(variable_thing_Long_is_1, variable_thing_Long_is_1,
+      variable_thing_Long_is_1, variable_thing_Long_is_1)

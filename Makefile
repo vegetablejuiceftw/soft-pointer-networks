@@ -5,7 +5,7 @@ PROJECT_ROOT ?= $(CURDIR)
 lint: black-check-all prospector isort
 
 .PHONY:
-lint-fix: black-format-all isort-fix yapf flynt autoflake prospector
+lint-fix: isort-fix black-format-all yapf flynt autoflake prospector
 
 .PHONY:
 black-check-all:
@@ -13,7 +13,7 @@ black-check-all:
 
 .PHONY:
 black-format-all:
-	@black .
+	@black --line-length 120 .
 
 .PHONY:
 isort:

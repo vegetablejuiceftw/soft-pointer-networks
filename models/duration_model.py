@@ -25,28 +25,15 @@ class DurationNetwork(nn.Module):
         self.mode = "fast"
 
         self.encoder = Encoder(
-            hidden_size=embedding_size,
-            embedding_size=embedding_size,
-            num_layers=2,
-            dropout=dropout,
-            time_scale=None,
+            hidden_size=embedding_size, embedding_size=embedding_size, num_layers=2, dropout=dropout, time_scale=None,
         )
 
         self.encoder_transcription = Encoder(
-            hidden_size=hidden_size,
-            embedding_size=embedding_size,
-            num_layers=2,
-            dropout=dropout,
-            time_scale=None,
+            hidden_size=hidden_size, embedding_size=embedding_size, num_layers=2, dropout=dropout, time_scale=None,
         )
 
         self.decoder_transcription = Decoder(
-            embedding_size,
-            hidden_size,
-            hidden_size,
-            num_layers=2,
-            dropout=dropout,
-            time_scale=None,
+            embedding_size, hidden_size, hidden_size, num_layers=2, dropout=dropout, time_scale=None,
         )
 
         self.encoder_audio = Encoder(
@@ -58,12 +45,7 @@ class DurationNetwork(nn.Module):
         )
 
         self.decoder_audio = Decoder(
-            embedding_size,
-            hidden_size,
-            output_size=hidden_size,
-            num_layers=2,
-            dropout=dropout,
-            time_scale=None,
+            embedding_size, hidden_size, output_size=hidden_size, num_layers=2, dropout=dropout, time_scale=None,
         )
 
         self.direct = nn.Linear(embedding_size, hidden_size)
@@ -81,10 +63,7 @@ class DurationNetwork(nn.Module):
 
         if self.mode not in ["direct", "audio"]:
             # hidden_size = hidden_size
-            (
-                encoder_transcription_extra,
-                hidden_transcription,
-            ) = self.encoder_transcription(features_transcription)
+            (encoder_transcription_extra, hidden_transcription,) = self.encoder_transcription(features_transcription)
 
         if self.mode not in ["direct", "trans"]:
             # hidden_size = hidden_size
@@ -101,20 +80,12 @@ class DurationNetwork(nn.Module):
 
         elif self.mode == "trans":
             output, _ = self.decoder_transcription(
-                encoded_transcription,
-                mask,
-                hidden_transcription,
-                encoder_transcription_extra,
-                mask,
+                encoded_transcription, mask, hidden_transcription, encoder_transcription_extra, mask,
             )
 
         elif self.mode == "fast":
             output_transcription, _ = self.decoder_transcription(
-                encoded_transcription,
-                mask,
-                hidden_transcription,
-                encoder_transcription_extra,
-                mask,
+                encoded_transcription, mask, hidden_transcription, encoder_transcription_extra, mask,
             )
 
             output = torch.cat((output_transcription, output_audio), 2)

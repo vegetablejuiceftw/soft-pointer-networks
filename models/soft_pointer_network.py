@@ -41,10 +41,7 @@ class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
         ).to(device)
 
         self.a_transformer = nn.Sequential(
-            nn.Linear(embedding_audio_size, 32),
-            nn.Sigmoid(),
-            nn.Linear(32, embedding_audio_size),
-            nn.Sigmoid(),
+            nn.Linear(embedding_audio_size, 32), nn.Sigmoid(), nn.Linear(32, embedding_audio_size), nn.Sigmoid(),
         ).to(device)
 
         self.encoder_transcription = Encoder(
@@ -66,15 +63,9 @@ class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
         )
 
         self.attn = Attention(None)
-        self.gradient = (torch.cumsum(torch.ones(2 ** 14), 0).unsqueeze(1) - 1).to(
-            device
-        )
-        self.zero = torch.zeros(hidden_size, 2048, self.position_encoding_size).to(
-            device
-        )
-        self.pos_encode = PositionalEncoding(
-            self.position_encoding_size, dropout, scale=time_audio_scale
-        )
+        self.gradient = (torch.cumsum(torch.ones(2 ** 14), 0).unsqueeze(1) - 1).to(device)
+        self.zero = torch.zeros(hidden_size, 2048, self.position_encoding_size).to(device)
+        self.pos_encode = PositionalEncoding(self.position_encoding_size, dropout, scale=time_audio_scale)
 
         self.to(device)
 
@@ -94,9 +85,7 @@ class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
         positions = (self.gradient[:seq_len] * weights.transpose(1, 2)).sum(1)[:, :-1]
         return positions
 
-    def forward(
-        self, features_transcription, mask_transcription, features_audio, mask_audio
-    ):
+    def forward(self, features_transcription, mask_transcription, features_audio, mask_audio):
         # TODO: use pytorch embeddings
         batch_size, out_seq_len, _ = features_transcription.shape
         audio_seq_len = features_audio.shape[1]
@@ -114,25 +103,18 @@ class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
         encoder_transcription_outputs, _ = self.encoder_transcription(
             features_transcription, skip_pos_encode=not self.use_pos_encode,
         )
-        encoder_audio_outputs, _ = self.encoder_audio(
-            features_audio, skip_pos_encode=not self.use_pos_encode
-        )
+        encoder_audio_outputs, _ = self.encoder_audio(features_audio, skip_pos_encode=not self.use_pos_encode)
 
         if not self.use_iter:
             # not progressive batching
             w = self.attn(
-                F.tanh(encoder_transcription_outputs),
-                mask_transcription,
-                F.tanh(encoder_audio_outputs),
-                mask_audio,
+                F.tanh(encoder_transcription_outputs), mask_transcription, F.tanh(encoder_audio_outputs), mask_audio,
             )
 
         else:
             encoder_transcription_outputs = F.relu(encoder_transcription_outputs)
             encoder_audio_outputs = F.relu(encoder_audio_outputs)
-            w = torch.zeros(batch_size, out_seq_len, audio_seq_len).to(
-                self.device
-            )  # tensor to store decoder outputs
+            w = torch.zeros(batch_size, out_seq_len, audio_seq_len).to(self.device)  # tensor to store decoder outputs
 
             w_masks, w_mask, iter_mask_audio = [], None, mask_audio
             for t in range(out_seq_len):
@@ -155,20 +137,10 @@ class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
                     a = a * (w_mask.unsqueeze(2) * (1 - pad) + pad)
                     b = b * (w_mask_b.unsqueeze(2) * (1 - pad) + pad)
                     iter_memory = torch.cat([a, b], dim=2)
-                    iter_mask_audio = (
-                        mask_audio * (w_mask > 0.1)
-                        if mask_audio is not None
-                        else w_mask > 0.1
-                    )
+                    iter_mask_audio = mask_audio * (w_mask > 0.1) if mask_audio is not None else w_mask > 0.1
 
-                iter_mask_transcription = (
-                    None
-                    if mask_transcription is None
-                    else mask_transcription[:, t : (t + 1)]
-                )
-                w_slice = self.attn(
-                    iter_input, iter_mask_transcription, iter_memory, iter_mask_audio
-                )
+                iter_mask_transcription = None if mask_transcription is None else mask_transcription[:, t : (t + 1)]
+                w_slice = self.attn(iter_input, iter_mask_transcription, iter_memory, iter_mask_audio)
 
                 if w_mask is not None:
                     w[:, t : (t + 1), :] = w_slice * w_mask.unsqueeze(1)

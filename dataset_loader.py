@@ -101,9 +101,8 @@ def find_borders(output_ids, original_mapping):
     arr = np.append(arr, last)
     flat_ids = np.array(dedupe(output_ids))
     ids = np.array([voc for voc, end in original_mapping])
-    assert (ids.shape == flat_ids.shape) and (ids != flat_ids).sum() == 0, (
-        f"[error] Mapping and Output have same composition {ids.shape} {flat_ids.shape}"
-    )
+    assert (ids.shape == flat_ids.shape) and (ids != flat_ids).sum(
+    ) == 0, f"[error] Mapping and Output have same composition {ids.shape} {flat_ids.shape}"
     a, b = np.array([end for voc, end in original_mapping]), arr
 
     diff = a - b
@@ -322,8 +321,8 @@ class DirectMaskDataset(Dataset):
 
                 cache_audio = AudioCaching.get(audio_file, key_pitch)
                 got_pitch = cache_audio is not None
-                cache_audio = (cache_audio if got_pitch else AudioCaching.get(
-                    audio_file, key_stretch))
+                cache_audio = cache_audio if got_pitch else AudioCaching.get(
+                    audio_file, key_stretch)
                 got_stretch = cache_audio is not None
 
                 audio = cache_audio if cache_audio is not None else audio

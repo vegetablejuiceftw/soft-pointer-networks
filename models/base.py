@@ -40,11 +40,7 @@ class ModeSwitcherBase:
         return super().__getattr__(item)
 
     def __dir__(self):
-        return (
-            list(super().__dir__())
-            + [f"is_{k}" for k in self.Mode.keys()]
-            + [f"with_{k}" for k in self.Mode.keys()]
-        )
+        return list(super().__dir__()) + [f"is_{k}" for k in self.Mode.keys()] + [f"with_{k}" for k in self.Mode.keys()]
 
     def __str__(self):
         return f"{self.__class__.__name__}.with_{self.mode.name}"
@@ -59,9 +55,7 @@ class ExportImportMixin:
 
     def load(self: torch.nn.Module, path, ignore: List[str] = None):
         model_dict = self.state_dict()
-        pretrained_dict: Union[Dict, Any] = torch.load(
-            path, map_location=next(self.parameters()).device
-        )
+        pretrained_dict: Union[Dict, Any] = torch.load(path, map_location=next(self.parameters()).device)
         # 1. filter out unnecessary keys
         pretrained_dict = {
             k: v

@@ -1,7 +1,5 @@
 from os.path import join
 
-
-
 BASE_PATH = "/content/TIMIT-PLUS"
 FULL_FODLER_PATH = join(BASE_PATH, "data")
 
@@ -12,9 +10,7 @@ WIN_STEP = 0.010
 WIN_SIZE = 0.025
 # WIN_SIZE = 0.030
 
-DURATION_SCALER = (
-    256.0  # duration models do not play well with 123ms bot not also with 0.1sec ...
-)
+DURATION_SCALER = 256.0  # duration models do not play well with 123ms bot not also with 0.1sec ...
 
 INPUT_SIZE = 26
 ms_per_step = WIN_STEP * 1000

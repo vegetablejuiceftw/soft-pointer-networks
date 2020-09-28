@@ -18,16 +18,12 @@ class PositionalEncoding(nn.Module):
 
         pe = torch.zeros(max_len, d_model)
         position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
-        div_term = torch.exp(
-            torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model)
-        )
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
 
         # todo: The default behavior for interpolate/up sample with float scale_factor will change in 1.6.0
-        m = nn.Upsample(
-            scale_factor=(1.0 / scale, 1), mode="bilinear", align_corners=True
-        )
+        m = nn.Upsample(scale_factor=(1.0 / scale, 1), mode="bilinear", align_corners=True)
 
         shape = pe.shape
         pe = pe.view(1, 1, *shape)
@@ -94,46 +90,28 @@ class Attention(nn.Module):
 
             attn.data.masked_fill_(~mask_context.unsqueeze(1), -float("inf"))
 
-        attn = fun.softmax(attn.view(-1, input_size), dim=1).view(
-            batch_size, -1, input_size
-        )
+        attn = fun.softmax(attn.view(-1, input_size), dim=1).view(batch_size, -1, input_size)
         if not self.dim:
             return attn
 
-        mix = torch.bmm(
-            attn, context
-        )  # (batch, out_len, in_len) * (batch, in_len, dim) -> (batch, out_len, dim)
+        mix = torch.bmm(attn, context)  # (batch, out_len, in_len) * (batch, in_len, dim) -> (batch, out_len, dim)
         combined = torch.cat((mix, output), dim=2)  # concat -> (batch, out_len, 2*dim)
 
         # output -> (batch, out_len, dim)
-        output = torch.tanh(self.linear_out(combined.view(-1, 2 * hidden_size))).view(
-            batch_size, -1, hidden_size
-        )
+        output = torch.tanh(self.linear_out(combined.view(-1, 2 * hidden_size))).view(batch_size, -1, hidden_size)
         return output, attn
 
 
 class Decoder(nn.Module):
     def __init__(
-        self,
-        embedding_size,
-        hidden_size,
-        output_size,
-        num_layers=2,
-        dropout=0.1,
-        time_scale=1,
+        self, embedding_size, hidden_size, output_size, num_layers=2, dropout=0.1, time_scale=1,
     ):
         super().__init__()
         self.hidden_size = hidden_size
         self.output_size = output_size
         self.num_layers = num_layers
         self.dropout = dropout
-        self.gru = nn.GRU(
-            embedding_size,
-            hidden_size,
-            num_layers=num_layers,
-            dropout=dropout,
-            batch_first=True,
-        )
+        self.gru = nn.GRU(embedding_size, hidden_size, num_layers=num_layers, dropout=dropout, batch_first=True,)
         self.out = nn.Linear(hidden_size, output_size)
         self.attn = Attention(hidden_size)
 
@@ -150,13 +128,7 @@ class Decoder(nn.Module):
 
 class Encoder(nn.Module):
     def __init__(
-        self,
-        hidden_size,
-        embedding_size,
-        out_dim=None,
-        num_layers=2,
-        dropout=0.1,
-        time_scale=1,
+        self, hidden_size, embedding_size, out_dim=None, num_layers=2, dropout=0.1, time_scale=1,
     ):
         super().__init__()
         self.hidden_size = hidden_size
@@ -166,18 +138,11 @@ class Encoder(nn.Module):
         self.batchnorm = nn.BatchNorm1d(embedding_size)
         # Embedding layer that will be shared with Decoder
         self.gru = nn.GRU(
-            embedding_size,
-            hidden_size,
-            num_layers=num_layers,
-            dropout=dropout,
-            bidirectional=True,
-            batch_first=True,
+            embedding_size, hidden_size, num_layers=num_layers, dropout=dropout, bidirectional=True, batch_first=True,
         )
         self.fc = nn.Linear(hidden_size * 2, out_dim or hidden_size)
 
-        self.pos_encode = PositionalEncoding(
-            out_dim or hidden_size, dropout, scale=time_scale
-        )
+        self.pos_encode = PositionalEncoding(out_dim or hidden_size, dropout, scale=time_scale)
 
     def forward(self, x, *, skip_pos_encode=False):
         x = x.permute(0, 2, 1).contiguous()
@@ -200,12 +165,7 @@ class LightLSTM(nn.Module):
         self.batchnorm = nn.BatchNorm1d(feature_dim)
         self.hidden_size = 128
         self.rnn = nn.LSTM(
-            feature_dim,
-            self.hidden_size,
-            batch_first=True,
-            bidirectional=True,
-            num_layers=2,
-            dropout=dropout_prob,
+            feature_dim, self.hidden_size, batch_first=True, bidirectional=True, num_layers=2, dropout=dropout_prob,
         )
         self.fc = nn.Linear(self.hidden_size * 2, out_dim)
         self.with_hidden = with_hidden
