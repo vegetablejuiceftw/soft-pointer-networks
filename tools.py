@@ -1,50 +1,17 @@
 import contextlib
-import cProfile
-import gc
-import json
-import math
-import os
-import random
-import sys
-import uuid
-from collections import Counter, OrderedDict, defaultdict, namedtuple
-from itertools import chain
-from os.path import join
-from pprint import pprint
-from random import Random, choice, sample
-from time import sleep
-from typing import List, NamedTuple
+from collections import defaultdict
+from random import sample
 
-import IPython.display as ipd
 import matplotlib.pyplot as plt
 import numpy as np
-import scipy.io.wavfile as wavfile
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-from google.colab import drive
-from IPython.display import Audio, Image, display
-from matplotlib import cm, gridspec
+from matplotlib import cm
 from matplotlib.pyplot import figure
 from matplotlib.ticker import FormatStrFormatter
-from numpy import dot
-from numpy.linalg import norm
-from torch.utils.data import DataLoader, Dataset
 
-import librosa
-import pandas as pd
-import pyrubberband as pyrb
-import soundfile as sf
-from dtaidistance import dtw as dtaidtw
-from dtaidistance.dtw_ndim import warping_paths
-from dtw import accelerated_dtw as adtw
-from dtw import dtw
 from fastdtw import dtw as slowdtw
-from fastdtw import fastdtw
-from python_speech_features import logfbank, mfcc
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-from torchtext.data import BucketIterator, Field, RawField
+from torchtext.data import BucketIterator
 
 from .constants import *
 
@@ -501,11 +468,11 @@ def show_position(
     if duration_combined_model is not None:
         duration_combined_model.eval()
 
-    c = torch.cumsum(torch.ones(2**14), 0).unsqueeze(1) - 1
+    torch.cumsum(torch.ones(2**14), 0).unsqueeze(1) - 1
     print("dataset len", len(dataset))
 
     diffs = []
-    att = Attention(POS_DIM)
+    Attention(POS_DIM)
 
     for idx in sample(range(len(dataset)), min(len(dataset), sample_size)):
         inp: Utterance = dataset[idx]
@@ -568,7 +535,7 @@ def show_position(
 
 
 def location_fix(positions, truth, durations, end_of_audio):
-    switched = False
+    pass
 
     prev = 0
     difos = []
@@ -609,7 +576,6 @@ def location_fix(positions, truth, durations, end_of_audio):
         v = positions[i]
 
         if v < prev:
-            switched = True
             after = positions[i + 1] if i + 1 < len(positions) else prev + 0.01
 
         if v < prev:

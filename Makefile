@@ -37,4 +37,4 @@ flynt:
 
 .PHONY:
 autoflake:
-	@autoflake --in-place --remove-unused-variables .
+	@autoflake -r --in-place --remove-unused-variables --remove-all-unused-imports --remove-duplicate-keys .
