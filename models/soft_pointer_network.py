@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .components import Attention, Encoder, PositionalEncoding
 from .base import ExportImportMixin, ModeSwitcherBase
+from .components import Attention, Encoder, PositionalEncoding
 
 
 class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):

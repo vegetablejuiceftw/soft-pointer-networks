@@ -61,6 +61,25 @@ class Utterance(NamedTuple):
     audio_file: str
     label_file: str
 
+
+class UtterancePadded(NamedTuple):
+    features: UtteranceBatch
+    labels: UtteranceBatch
+    transcription: torch.tensor
+    label_vec: torch.tensor
+    out_map: List
+    out_duration: UtteranceBatch
+    in_transcription: UtteranceBatch
+    position: UtteranceBatch
+    border: UtteranceBatch
+    weight: UtteranceBatch
+
+    index: int
+    key: str
+    audio_file: str
+    label_file: str
+
+
 def dedupe(tags):
     labels = []
     last = None
@@ -169,7 +188,7 @@ class DirectMaskDataset(Dataset):
 
             unholy_combination = prev in NO_BORDER_MAPPING and tag in NO_BORDER_MAPPING
             # if unholy_combination:
-                # unholy.add((prev, tag))
+            # unholy.add((prev, tag))
 
             if prev == tag and MERGE_DOUBLES or unholy_combination or q_tag:
                 tag_id, ems = tag_mapping[-1]
