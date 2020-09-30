@@ -89,7 +89,12 @@ class MultiContextAttentionAudio(nn.Module):
             # hidden_size = hidden_size,
             # output_size = hidden_size,
             output_audio, hidden_audio = self.decoder_audio_to_audio(
-                output_combined, mask_audio, hidden_audio, encoded_audio_extra, mask_audio,  # vocab_size  # hidden_size
+                # vocab_size  # hidden_size
+                output_combined,
+                mask_audio,
+                hidden_audio,
+                encoded_audio_extra,
+                mask_audio,
             )
 
             return self.out_chain(output_audio)

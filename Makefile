@@ -5,7 +5,7 @@ PROJECT_ROOT ?= $(CURDIR)
 lint: black-check-all prospector isort
 
 .PHONY:
-lint-fix: isort-fix black-format-all yapf flynt autoflake prospector
+lint-fix: isort-fix autoflake autopep docformatter yapf flynt black-format-all prospector
 
 .PHONY:
 black-check-all:
@@ -38,3 +38,11 @@ flynt:
 .PHONY:
 autoflake:
 	@autoflake -r --in-place --remove-unused-variables --remove-all-unused-imports --remove-duplicate-keys .
+
+.PHONY:
+autopep:
+	@autopep8 --in-place --aggressive --aggressive --max-line-length 120 -j 4 -r .
+
+.PHONY:
+docformatter:
+	@docformatter --in-place --wrap-summaries 120 --wrap-descriptions 120  --blank -r .

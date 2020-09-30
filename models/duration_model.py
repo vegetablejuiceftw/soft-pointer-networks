@@ -92,7 +92,8 @@ class DurationNetwork(nn.Module):
             output = self.fast(output)
 
         elif self.mode == "chain":
-            # mangle the output to be acceptable for one more pass through the encoders
+            # mangle the output to be acceptable for one more pass through the
+            # encoders
             output_audio, hidden_audio = self.chain(output_audio), hidden_audio
 
             # pass hidden audio as a hint

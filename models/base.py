@@ -47,10 +47,11 @@ class ModeSwitcherBase:
 
 
 class ExportImportMixin:
-    """
-    Simple wrapper to load / export model weights
+    """Simple wrapper to load / export model weights.
+
     - allows to skip import of keys which contain a ignore tokens,
         i.e 'coder_w' will skip 'encoder_weights' and 'decoder_weights'
+
     """
 
     def load(self: torch.nn.Module, path, ignore: List[str] = None):

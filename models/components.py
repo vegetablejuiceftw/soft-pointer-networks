@@ -22,7 +22,8 @@ class PositionalEncoding(nn.Module):
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
 
-        # todo: The default behavior for interpolate/up sample with float scale_factor will change in 1.6.0
+        # todo: The default behavior for interpolate/up sample with float
+        # scale_factor will change in 1.6.0
         m = nn.Upsample(scale_factor=(1.0 / scale, 1), mode="bilinear", align_corners=True)
 
         shape = pe.shape
@@ -78,7 +79,8 @@ class Attention(nn.Module):
             context.size(1),
         )
         # (batch, out_len, dim) * (batch, in_len, dim) -> (batch, out_len, in_len)
-        # matrix by matrix product https://pytorch.org/docs/stable/torch.html#torch.bmm
+        # matrix by matrix product
+        # https://pytorch.org/docs/stable/torch.html#torch.bmm
         attn = torch.bmm(output, context.transpose(1, 2))
         # TODO: scale step missing?
 
@@ -94,8 +96,10 @@ class Attention(nn.Module):
         if not self.dim:
             return attn
 
-        mix = torch.bmm(attn, context)  # (batch, out_len, in_len) * (batch, in_len, dim) -> (batch, out_len, dim)
-        combined = torch.cat((mix, output), dim=2)  # concat -> (batch, out_len, 2*dim)
+        # (batch, out_len, in_len) * (batch, in_len, dim) -> (batch, out_len, dim)
+        mix = torch.bmm(attn, context)
+        # concat -> (batch, out_len, 2*dim)
+        combined = torch.cat((mix, output), dim=2)
 
         # output -> (batch, out_len, dim)
         output = torch.tanh(self.linear_out(combined.view(-1, 2 * hidden_size))).view(batch_size, -1, hidden_size)

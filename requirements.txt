@@ -9,3 +9,4 @@ yapf
 autopep8
 flynt==0.52
 autoflake
+docformatter
