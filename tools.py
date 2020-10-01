@@ -433,9 +433,9 @@ def show_position(
         borders_predicted = model(transcription.unsqueeze(0), None, audio.unsqueeze(0), None)[0]
 
         prev = 0
+        switched = False
         if duration_combined_model is None:
             new = borders_predicted.detach().cpu().numpy() * ms_per_step
-            switched = False
             for i, v in enumerate(new):
                 if abs(v - prev) > 500 or v < prev:
                     after = new[i + 1] if i + 1 < len(new) else prev
@@ -447,7 +447,6 @@ def show_position(
             duration = None
             prediction_position = borders_predicted.detach().cpu().numpy() * ms_per_step
             new = prediction_position.copy()
-            switched = False
             for i, v in enumerate(new):
                 after = new[i + 1] if i + 1 < len(new) else v
                 if v < prev or v > after:
@@ -482,8 +481,6 @@ def show_position(
 
 
 def location_fix(positions, truth, durations, end_of_audio):
-    pass
-
     prev = 0
     difos = []
     visited = []
