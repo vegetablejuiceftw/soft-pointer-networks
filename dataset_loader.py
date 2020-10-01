@@ -367,7 +367,7 @@ class DirectMaskDataset(Dataset):
                     end_ms = min(end_ms, length_ms)
                     labels.append((end_ms, tag))
 
-                length = int((end_ms / step_size))
+                length = int(end_ms / step_size)
 
             (tag_ints, tag_vecs, tag_mapping, transcription, transcription_ints) = self.process_audio(
                 labels, length, step_size,

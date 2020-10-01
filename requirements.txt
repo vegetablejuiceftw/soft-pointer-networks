@@ -1,5 +1,7 @@
 torch
 
+# pip install --use-feature=2020-resolver
+
 # quality
 PyYAML==5.3.1
 black==19.10b0
@@ -18,3 +20,8 @@ clean-py
 add-trailing-comma
 trim
 unify
+pyupgrade
+# shed
+# gray
+git+https://github.com/kwatme/clean_ipynb
+joli

@@ -112,7 +112,7 @@ NO_BORDER_MAPPING = {
 }
 
 KNOWN_LABELS = list(
-    sorted(set(TRANSFORM_MAPPING.get(k, k) for k in sorted(FOUND_LABELS.keys()) if TRANSFORM_MAPPING.get(k, k))),
+    sorted({TRANSFORM_MAPPING.get(k, k) for k in sorted(FOUND_LABELS.keys()) if TRANSFORM_MAPPING.get(k, k)}),
 )
 KNOWN_LABELS_COUNT = len(KNOWN_LABELS)
 

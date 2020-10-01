@@ -8,7 +8,7 @@ import torch.nn.functional as fun
 
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, dropout=0.1, scale=1, max_len=2048):
-        super(PositionalEncoding, self).__init__()
+        super().__init__()
         self.scale = scale
         self.dropout = nn.Dropout(p=dropout)
         if not self.scale:
@@ -65,7 +65,7 @@ class Attention(nn.Module):
     """
 
     def __init__(self, dim: Optional[int] = None):
-        super(Attention, self).__init__()
+        super().__init__()
         self.dim = dim
         if self.dim:
             self.linear_out = nn.Linear(dim * 2, dim)

@@ -2,7 +2,7 @@
 PROJECT_ROOT ?= $(CURDIR)
 
 .PHONY:
-lint: black-check-all prospector isort
+quality: black-check-all prospector isort
 
 .PHONY:
 lint-fix:
@@ -10,6 +10,7 @@ lint-fix:
 	@make clean-notebook
 	@make docformatter trim unify
 	@make flynt trailing-comma
+	@make pyupgrade
 	@make isort-fix autoflake autopep yapf
 	@make black-format-all
 	@make prospector
@@ -69,7 +70,7 @@ clean-notebook:
 
 .PHONY:
 trailing-comma:
-	@add-trailing-comma --py36-plus $(find . -name '*.py')
+	@add-trailing-comma --py36-plus $$(find . -name '*.py')
 
 .PHONY:
 pylint:
@@ -82,3 +83,7 @@ trim:
 .PHONY:
 unify:
 	@unify --in-place -r .
+
+.PHONY:
+pyupgrade:
+	@pyupgrade --exit-zero-even-if-changed --py38-plus $$(find . -name '*.py')
