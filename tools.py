@@ -13,7 +13,19 @@ from matplotlib.ticker import FormatStrFormatter
 from fastdtw import dtw as slowdtw
 from torchtext.data import BucketIterator
 
-from .constants import *
+from .constants import (
+    DURATION_SCALER,
+    KNOWN_LABELS,
+    POS_DIM,
+    WIN_STEP,
+    Attention,
+    Utterance,
+    dedupe,
+    find_borders,
+    ms_per_step,
+    test_dataset,
+    transcription_with_duration,
+)
 
 
 @contextlib.contextmanager
@@ -82,7 +94,7 @@ def find_borders_pathed(path: list, original_mapping: list):
             end
             for i, (voc, end) in enumerate(original_mapping)
             if original_mapping[min(i + 1, len(original_mapping) - 1)][0] != voc
-        ]
+        ],
     )
 
     assert (
@@ -204,13 +216,13 @@ def display_diff(errors, name="", unit="ms", plotting=False):
     errors = errors.copy()
     hist, bins = np.histogram(
         abs(errors),
-        bins=[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 9999,],
+        bins=[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 9999],
     )
     hist = np.round(hist / len(errors) * 100, 2)
     hist = np.cumsum(hist)
 
     print(
-        f"[{name}] DIFF abs mean: {abs(errors).mean():.2f}{unit} ({errors.mean():.2f}) min:{abs(errors).min():.2f}{unit} max:{abs(errors).max():.2f}{unit}"
+        f"[{name}] DIFF abs mean: {abs(errors).mean():.2f}{unit} ({errors.mean():.2f}) min:{abs(errors).min():.2f}{unit} max:{abs(errors).max():.2f}{unit}",
     )
     rows = list(zip(hist, bins, bins[1:]))
     for R in zip(rows[::2], rows[1::2]):
@@ -251,7 +263,7 @@ def draw_duration(model, dataset, index):
     print(total_duration, sum(prediction))
     prediction = prediction / sum(prediction) * total_duration
     transcription_with_duration = generate_duration_transcription(
-        inp.in_transcription.detach().cpu().numpy(), prediction
+        inp.in_transcription.detach().cpu().numpy(), prediction,
     )
 
     f, axarr = plt.subplots(4, figsize=(8, 8))
@@ -350,7 +362,7 @@ def show_audio(model, dataset, name, plot_only=False, duration_model=None):
         dataset, batch_size=64, sort_key=lambda x: len(x.features), sort=False, shuffle=True, sort_within_batch=True,
     )
     dtw_errors, detection_errors, diff = evaluate_result(
-        model, dataset_iter, lower=False, duration_model=duration_model
+        model, dataset_iter, lower=False, duration_model=duration_model,
     )
     display_error(dtw_errors, "DETECTION+DTW")
     display_error(detection_errors, "DETECTION")
@@ -442,7 +454,7 @@ def show_position(
                     if duration is None:
                         duration = (
                             (
-                                duration_combined_model(transcription.unsqueeze(0), None, audio.unsqueeze(0), None,)
+                                duration_combined_model(transcription.unsqueeze(0), None, audio.unsqueeze(0), None)
                                 * DURATION_SCALER
                             )
                             .view(-1)
@@ -548,7 +560,7 @@ def show_position_batched(model, dataset, duration_combined_model=None, report_e
         if duration_combined_model is not None:
             duration_batch = (
                 (
-                    duration_combined_model(features_transcription, masks_transcription, features_audio, masks_audio,)
+                    duration_combined_model(features_transcription, masks_transcription, features_audio, masks_audio)
                     * DURATION_SCALER
                 )
                 .detach()
@@ -671,7 +683,7 @@ def explore_inherit_border_error(dataset):
                     original_ids[-10:],
                 )
                 prev = 0
-                for (voc, t), oid in zip(mapping, dedupe(original_ids) + [99, 99, 99],):
+                for (voc, t), oid in zip(mapping, dedupe(original_ids) + [99, 99, 99]):
                     print(f"{int(voc)}-{int(oid)} \t{t:.0f}\t{t - prev:.0f}")
                     prev = t
 

@@ -115,7 +115,7 @@ class Decoder(nn.Module):
         self.output_size = output_size
         self.num_layers = num_layers
         self.dropout = dropout
-        self.gru = nn.GRU(embedding_size, hidden_size, num_layers=num_layers, dropout=dropout, batch_first=True,)
+        self.gru = nn.GRU(embedding_size, hidden_size, num_layers=num_layers, dropout=dropout, batch_first=True)
         self.out = nn.Linear(hidden_size, output_size)
         self.attn = Attention(hidden_size)
 

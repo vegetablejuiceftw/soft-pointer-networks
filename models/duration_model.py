@@ -63,7 +63,7 @@ class DurationNetwork(nn.Module):
 
         if self.mode not in ["direct", "audio"]:
             # hidden_size = hidden_size
-            (encoder_transcription_extra, hidden_transcription,) = self.encoder_transcription(features_transcription)
+            (encoder_transcription_extra, hidden_transcription) = self.encoder_transcription(features_transcription)
 
         if self.mode not in ["direct", "trans"]:
             # hidden_size = hidden_size
@@ -72,7 +72,7 @@ class DurationNetwork(nn.Module):
         output = self.direct(encoded_transcription)
 
         output_audio, hidden_audio = self.decoder_audio(
-            encoded_transcription, mask, hidden_audio, encoded_audio, masks_audio
+            encoded_transcription, mask, hidden_audio, encoded_audio, masks_audio,
         )
 
         if self.mode == "audio":
@@ -98,7 +98,7 @@ class DurationNetwork(nn.Module):
 
             # pass hidden audio as a hint
             output, hidden_transcription = self.decoder_transcription(
-                output_audio, mask, hidden_audio, encoder_transcription_extra, mask
+                output_audio, mask, hidden_audio, encoder_transcription_extra, mask,
             )
 
         output = torch.log1p(fun.relu(output))

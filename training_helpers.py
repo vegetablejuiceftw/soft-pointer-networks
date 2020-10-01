@@ -250,7 +250,7 @@ def evaluate(model, data_iter, train_function=position_encode_trainer, loss_func
             total_loss += abs(train_function(batch, model, loss_function).item())
             size += 1
     print(
-        f"  Evaluation[{getattr(data_iter, 'prefix', '')}] - avg_loss: {total_loss / size:.7f} count:{size} Total loss:{total_loss:.7f}"
+        f"  Evaluation[{getattr(data_iter, 'prefix', '')}] - avg_loss: {total_loss / size:.7f} count:{size} Total loss:{total_loss:.7f}",
     )
 
 
@@ -311,4 +311,6 @@ class MaskedThing(nn.Module):
 
 
 variable_thing_Long_is_1 = 1
-print(variable_thing_Long_is_1, variable_thing_Long_is_1, variable_thing_Long_is_1, variable_thing_Long_is_1)
+print(
+    variable_thing_Long_is_1, variable_thing_Long_is_1, variable_thing_Long_is_1, variable_thing_Long_is_1,
+)

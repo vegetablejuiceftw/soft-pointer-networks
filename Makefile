@@ -5,7 +5,14 @@ PROJECT_ROOT ?= $(CURDIR)
 lint: black-check-all prospector isort
 
 .PHONY:
-lint-fix: isort-fix autoflake autopep docformatter yapf flynt black-format-all prospector
+lint-fix:
+	@make clean-cache
+	@make clean-notebook
+	@make docformatter trim unify
+	@make flynt trailing-comma
+	@make isort-fix autoflake autopep yapf
+	@make black-format-all
+	@make prospector
 
 .PHONY:
 black-check-all:
@@ -26,6 +33,7 @@ isort-fix:
 .PHONY:
 prospector:
 	@prospector
+#	@prospector --without-tool pylint
 
 .PHONY:
 yapf:
@@ -46,3 +54,31 @@ autopep:
 .PHONY:
 docformatter:
 	@docformatter --in-place --wrap-summaries 120 --wrap-descriptions 120  --blank -r .
+
+.PHONY:
+vulture:
+	@vulture .
+
+.PHONY:
+clean-cache:
+	@cleanpy -av --exclude-envs .
+
+.PHONY:
+clean-notebook:
+	@cleanpy -av --exclude-envs .
+
+.PHONY:
+trailing-comma:
+	@add-trailing-comma --py36-plus $(find . -name '*.py')
+
+.PHONY:
+pylint:
+	@pylint -j 8 .
+
+.PHONY:
+trim:
+	@trim .
+
+.PHONY:
+unify:
+	@unify --in-place -r .

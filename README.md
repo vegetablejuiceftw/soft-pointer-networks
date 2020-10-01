@@ -2,13 +2,13 @@
 
 https://github.com/vegetablejuiceftw/soft-pointer-networks
 
-### Demo 
+### Demo
 - web-demo: https://colab.research.google.com/drive/15HL-porabGKIsWxRmtZghfTd7_SCD4dH?usp=sharing
 - src: `Soft_Pointer_Network_DEMO.ipynb`
 
 _There is also the raw file available:_
 - raw: `Soft_Pointer_Network_RAW.ipynb`
-    
+
 # The Model
 
 As in `/models/soft_pointer_network.py`:
@@ -189,6 +189,6 @@ class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
 ## Extra dependencies for colab
 
 ```
-!pip install kaggle python_speech_features dtw fastdtw dtaidistance AudAugio pyrubberband --upgrade -q 
+!pip install kaggle python_speech_features dtw fastdtw dtaidistance AudAugio pyrubberband --upgrade -q
 !apt install soundstretch rubberband-cli librubberband2 libsndfile1 > /dev/null
 ```

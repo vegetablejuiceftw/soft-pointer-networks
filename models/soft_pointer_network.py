@@ -74,7 +74,7 @@ class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
 
         if position_encodings:
             position_encoding = self.pos_encode(
-                torch.zeros(batch, seq_len, self.position_encoding_size).to(self.device)
+                torch.zeros(batch, seq_len, self.position_encoding_size).to(self.device),
             )
             positions = torch.bmm(weights, position_encoding)
             return positions[:, :-1]

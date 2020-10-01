@@ -18,7 +18,22 @@ import soundfile as sf
 from python_speech_features import logfbank, mfcc
 from torchtext.data import BucketIterator, RawField
 
-from .constants import *
+from .constants import (
+    DURATION_SCALER,
+    FOUND_LABELS,
+    INPUT_SIZE,
+    KNOWN_LABELS,
+    MAP_LABELS,
+    MERGE_DOUBLES,
+    NO_BORDER_MAPPING,
+    POS_DIM,
+    POS_SCALE,
+    TRANSFORM_MAPPING,
+    WIN_SIZE,
+    WIN_STEP,
+    ms_per_step,
+    pyln,
+)
 
 
 class AudioCaching:
@@ -327,10 +342,10 @@ class DirectMaskDataset(Dataset):
                 stretch = len(audio) / audio_base_len
 
             fbank_feat = logfbank(
-                audio, rate, winlen=WIN_SIZE, winstep=WIN_STEP, nfilt=INPUT_SIZE
+                audio, rate, winlen=WIN_SIZE, winstep=WIN_STEP, nfilt=INPUT_SIZE,
             )  # TODO: remove scaling
             mfcc_feat = mfcc(
-                audio, rate, winlen=WIN_SIZE, winstep=WIN_STEP, nfilt=32, numcep=16
+                audio, rate, winlen=WIN_SIZE, winstep=WIN_STEP, nfilt=32, numcep=16,
             )  # TODO: remove scaling
 
             # some audio instances are too short for the audio transcription
@@ -354,8 +369,8 @@ class DirectMaskDataset(Dataset):
 
                 length = int((end_ms / step_size))
 
-            (tag_ints, tag_vecs, tag_mapping, transcription, transcription_ints,) = self.process_audio(
-                labels, length, step_size
+            (tag_ints, tag_vecs, tag_mapping, transcription, transcription_ints) = self.process_audio(
+                labels, length, step_size,
             )
             fbank_feat = fbank_feat[: len(tag_ints)]
             mfcc_feat = mfcc_feat[: len(tag_ints)]
@@ -409,7 +424,7 @@ class DirectMaskDataset(Dataset):
                 self.files.append((label_file, audio_file))
             else:
                 print(
-                    f"[ERROR] len not match {length} != {len(tag_vecs)} != {len(tag_ints)} \n\t - {label_file}\n\t - {audio_file}"
+                    f"[ERROR] len not match {length} != {len(tag_vecs)} != {len(tag_ints)} \n\t - {label_file}\n\t - {audio_file}",
                 )
 
         self.inp = stack(inp, torch.FloatTensor)

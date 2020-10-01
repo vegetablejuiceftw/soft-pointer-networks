@@ -82,7 +82,7 @@ FOUND_LABELS = dict(
         ("zh", 225),
         ("em", 171),
         ("eng", 43),
-    ]
+    ],
 )
 
 TRANSFORM_MAPPING = {
@@ -112,11 +112,11 @@ NO_BORDER_MAPPING = {
 }
 
 KNOWN_LABELS = list(
-    sorted(set(TRANSFORM_MAPPING.get(k, k) for k in sorted(FOUND_LABELS.keys()) if TRANSFORM_MAPPING.get(k, k)))
+    sorted(set(TRANSFORM_MAPPING.get(k, k) for k in sorted(FOUND_LABELS.keys()) if TRANSFORM_MAPPING.get(k, k))),
 )
 KNOWN_LABELS_COUNT = len(KNOWN_LABELS)
 
 MAP_LABELS = {
-    label: ([int(KNOWN_LABELS.index(label) == i) for i in range(KNOWN_LABELS_COUNT)], KNOWN_LABELS.index(label),)
+    label: ([int(KNOWN_LABELS.index(label) == i) for i in range(KNOWN_LABELS_COUNT)], KNOWN_LABELS.index(label))
     for label in KNOWN_LABELS
 }

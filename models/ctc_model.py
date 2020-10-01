@@ -56,7 +56,7 @@ class MultiContextAttentionAudio(nn.Module):
 
         # output_size=vocab_size
         encoded_audio, hidden = self.encoder_audio_initial(
-            features_transcription, mask_transcription, features_audio, mask_audio
+            features_transcription, mask_transcription, features_audio, mask_audio,
         )
 
         if self.mode == "direct":
