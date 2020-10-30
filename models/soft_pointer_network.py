@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .components import Attention, Encoder, PositionalEncoding
 from .base import ExportImportMixin, ModeSwitcherBase
+from .components import Attention, Encoder, PositionalEncoding
 
 
 class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
@@ -14,16 +14,16 @@ class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
         argmax = "argmax"
 
     def __init__(
-            self,
-            embedding_transcription_size,
-            embedding_audio_size,
-            hidden_size,
-            device,
-            dropout=0.35,
-            # position encoding time scaling
-            time_transcription_scale=8.344777745411855,
-            time_audio_scale=1,
-            position_encoding_size=32,
+        self,
+        embedding_transcription_size,
+        embedding_audio_size,
+        hidden_size,
+        device,
+        dropout=0.35,
+        # position encoding time scaling
+        time_transcription_scale=8.344777745411855,
+        time_audio_scale=1,
+        position_encoding_size=32,
     ):
         super().__init__()
         self.mode = self.Mode.gradient
@@ -37,14 +37,11 @@ class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
             nn.Linear(embedding_transcription_size, 32),
             nn.Sigmoid(),
             nn.Linear(32, embedding_transcription_size),
-            nn.Sigmoid()
+            nn.Sigmoid(),
         ).to(device)
 
         self.a_transformer = nn.Sequential(
-            nn.Linear(embedding_audio_size, 32),
-            nn.Sigmoid(),
-            nn.Linear(32, embedding_audio_size),
-            nn.Sigmoid()
+            nn.Linear(embedding_audio_size, 32), nn.Sigmoid(), nn.Linear(32, embedding_audio_size), nn.Sigmoid(),
         ).to(device)
 
         self.encoder_transcription = Encoder(
@@ -53,7 +50,8 @@ class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
             out_dim=hidden_size,
             num_layers=2,
             dropout=dropout,
-            time_scale=time_transcription_scale)
+            time_scale=time_transcription_scale,
+        )
 
         self.encoder_audio = Encoder(
             hidden_size=hidden_size,
@@ -76,7 +74,8 @@ class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
 
         if position_encodings:
             position_encoding = self.pos_encode(
-                torch.zeros(batch, seq_len, self.position_encoding_size).to(self.device))
+                torch.zeros(batch, seq_len, self.position_encoding_size).to(self.device),
+            )
             positions = torch.bmm(weights, position_encoding)
             return positions[:, :-1]
 
@@ -102,19 +101,15 @@ class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
             features_audio = self.a_transformer(features_audio)
 
         encoder_transcription_outputs, _ = self.encoder_transcription(
-            features_transcription,
-            skip_pos_encode=not self.use_pos_encode,
+            features_transcription, skip_pos_encode=not self.use_pos_encode,
         )
-        encoder_audio_outputs, _ = self.encoder_audio(
-            features_audio,
-            skip_pos_encode=not self.use_pos_encode
-        )
+        encoder_audio_outputs, _ = self.encoder_audio(features_audio, skip_pos_encode=not self.use_pos_encode)
 
         if not self.use_iter:
             # not progressive batching
             w = self.attn(
-                F.tanh(encoder_transcription_outputs), mask_transcription,
-                F.tanh(encoder_audio_outputs), mask_audio)
+                F.tanh(encoder_transcription_outputs), mask_transcription, F.tanh(encoder_audio_outputs), mask_audio,
+            )
 
         else:
             encoder_transcription_outputs = F.relu(encoder_transcription_outputs)
@@ -123,7 +118,7 @@ class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
 
             w_masks, w_mask, iter_mask_audio = [], None, mask_audio
             for t in range(out_seq_len):
-                iter_input = encoder_transcription_outputs[:, t:(t + 1), :]
+                iter_input = encoder_transcription_outputs[:, t : (t + 1), :]
                 iter_memory = encoder_audio_outputs
 
                 if len(w_masks) > 1:
@@ -144,13 +139,13 @@ class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
                     iter_memory = torch.cat([a, b], dim=2)
                     iter_mask_audio = mask_audio * (w_mask > 0.1) if mask_audio is not None else w_mask > 0.1
 
-                iter_mask_transcription = None if mask_transcription is None else mask_transcription[:, t:(t + 1)]
+                iter_mask_transcription = None if mask_transcription is None else mask_transcription[:, t : (t + 1)]
                 w_slice = self.attn(iter_input, iter_mask_transcription, iter_memory, iter_mask_audio)
 
                 if w_mask is not None:
-                    w[:, t:(t + 1), :] = w_slice * w_mask.unsqueeze(1)
+                    w[:, t : (t + 1), :] = w_slice * w_mask.unsqueeze(1)
                 else:
-                    w[:, t:(t + 1), :] = w_slice
+                    w[:, t : (t + 1), :] = w_slice
 
                 # update the progressive mask
                 w_mask = w_slice.squeeze(1).clone()
@@ -170,5 +165,5 @@ class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
         raise NotImplementedError(f"Mode {self.mode} not Implemented")
 
 
-if __name__ == '__main__':
-    print(SoftPointerNetwork(54, 26, 256, device='cpu'))
+if __name__ == "__main__":
+    print(SoftPointerNetwork(54, 26, 256, device="cpu"))

@@ -8,7 +8,7 @@ import torch.nn.functional as fun
 
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, dropout=0.1, scale=1, max_len=2048):
-        super(PositionalEncoding, self).__init__()
+        super().__init__()
         self.scale = scale
         self.dropout = nn.Dropout(p=dropout)
         if not self.scale:
@@ -22,21 +22,22 @@ class PositionalEncoding(nn.Module):
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
 
-        # todo: The default behavior for interpolate/up sample with float scale_factor will change in 1.6.0
-        m = nn.Upsample(scale_factor=(1. / scale, 1), mode='bilinear', align_corners=True)
+        # todo: The default behavior for interpolate/up sample with float
+        # scale_factor will change in 1.6.0
+        m = nn.Upsample(scale_factor=(1.0 / scale, 1), mode="bilinear", align_corners=True)
 
         shape = pe.shape
         pe = pe.view(1, 1, *shape)
         pe = m(pe).view(-1, d_model)
 
         pe = pe.unsqueeze(0).transpose(0, 1)
-        self.register_buffer('pe', pe)
+        self.register_buffer("pe", pe)
 
     def forward(self, x):
         if not self.scale:
             return x
         x = x.transpose(0, 1)
-        x = x + self.pe[:x.size(0), :]
+        x = x + self.pe[: x.size(0), :]
         x = x.transpose(0, 1)
         return self.dropout(x)
 
@@ -64,7 +65,7 @@ class Attention(nn.Module):
     """
 
     def __init__(self, dim: Optional[int] = None):
-        super(Attention, self).__init__()
+        super().__init__()
         self.dim = dim
         if self.dim:
             self.linear_out = nn.Linear(dim * 2, dim)
@@ -72,9 +73,14 @@ class Attention(nn.Module):
     def forward(self, output, mask_output, context, mask_context):
         # https://arxiv.org/abs/1706.03762
         # context & mask is what we attend to
-        batch_size, hidden_size, input_size = output.size(0), output.size(2), context.size(1)
+        batch_size, hidden_size, input_size = (
+            output.size(0),
+            output.size(2),
+            context.size(1),
+        )
         # (batch, out_len, dim) * (batch, in_len, dim) -> (batch, out_len, in_len)
-        # matrix by matrix product https://pytorch.org/docs/stable/torch.html#torch.bmm
+        # matrix by matrix product
+        # https://pytorch.org/docs/stable/torch.html#torch.bmm
         attn = torch.bmm(output, context.transpose(1, 2))
         # TODO: scale step missing?
 
@@ -84,14 +90,16 @@ class Attention(nn.Module):
                 attn.data.masked_fill_(~mask_output.unsqueeze(1), 0)
                 attn = attn.transpose(1, 2)
 
-            attn.data.masked_fill_(~mask_context.unsqueeze(1), -float('inf'))
+            attn.data.masked_fill_(~mask_context.unsqueeze(1), -float("inf"))
 
         attn = fun.softmax(attn.view(-1, input_size), dim=1).view(batch_size, -1, input_size)
         if not self.dim:
             return attn
 
-        mix = torch.bmm(attn, context)  # (batch, out_len, in_len) * (batch, in_len, dim) -> (batch, out_len, dim)
-        combined = torch.cat((mix, output), dim=2)  # concat -> (batch, out_len, 2*dim)
+        # (batch, out_len, in_len) * (batch, in_len, dim) -> (batch, out_len, dim)
+        mix = torch.bmm(attn, context)
+        # concat -> (batch, out_len, 2*dim)
+        combined = torch.cat((mix, output), dim=2)
 
         # output -> (batch, out_len, dim)
         output = torch.tanh(self.linear_out(combined.view(-1, 2 * hidden_size))).view(batch_size, -1, hidden_size)
@@ -99,7 +107,9 @@ class Attention(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, embedding_size, hidden_size, output_size, num_layers=2, dropout=0.1, time_scale=1):
+    def __init__(
+        self, embedding_size, hidden_size, output_size, num_layers=2, dropout=0.1, time_scale=1,
+    ):
         super().__init__()
         self.hidden_size = hidden_size
         self.output_size = output_size
@@ -121,7 +131,9 @@ class Decoder(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, hidden_size, embedding_size, out_dim=None, num_layers=2, dropout=0.1, time_scale=1):
+    def __init__(
+        self, hidden_size, embedding_size, out_dim=None, num_layers=2, dropout=0.1, time_scale=1,
+    ):
         super().__init__()
         self.hidden_size = hidden_size
         self.embedding_size = embedding_size
@@ -129,8 +141,9 @@ class Encoder(nn.Module):
         self.dropout = dropout
         self.batchnorm = nn.BatchNorm1d(embedding_size)
         # Embedding layer that will be shared with Decoder
-        self.gru = nn.GRU(embedding_size, hidden_size, num_layers=num_layers, dropout=dropout, bidirectional=True,
-                          batch_first=True)
+        self.gru = nn.GRU(
+            embedding_size, hidden_size, num_layers=num_layers, dropout=dropout, bidirectional=True, batch_first=True,
+        )
         self.fc = nn.Linear(hidden_size * 2, out_dim or hidden_size)
 
         self.pos_encode = PositionalEncoding(out_dim or hidden_size, dropout, scale=time_scale)
@@ -156,8 +169,8 @@ class LightLSTM(nn.Module):
         self.batchnorm = nn.BatchNorm1d(feature_dim)
         self.hidden_size = 128
         self.rnn = nn.LSTM(
-            feature_dim, self.hidden_size,
-            batch_first=True, bidirectional=True, num_layers=2, dropout=dropout_prob)
+            feature_dim, self.hidden_size, batch_first=True, bidirectional=True, num_layers=2, dropout=dropout_prob,
+        )
         self.fc = nn.Linear(self.hidden_size * 2, out_dim)
         self.with_hidden = with_hidden
 
