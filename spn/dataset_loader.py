@@ -16,8 +16,9 @@ import torch.nn as nn
 from python_speech_features import logfbank, mfcc
 from torch.utils.data import Dataset
 from torchtext.legacy.data import BucketIterator, RawField
+import torch.nn.functional as f
 
-from constants import (
+from spn.constants import (
     DURATION_SCALER,
     FOUND_LABELS,
     INPUT_SIZE,
@@ -120,6 +121,12 @@ def find_borders(output_ids, original_mapping):
     return a, b, diff
 
 
+class Upsample(nn.Upsample):
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        return f.interpolate(
+            input, self.size, self.scale_factor, self.mode, self.align_corners, recompute_scale_factor=True)
+
+
 class PositionalEncodingLabeler(nn.Module):
 
     def __init__(self, d_model, dropout=0.1, scale=1, max_len=2048):
@@ -160,7 +167,7 @@ class DirectMaskDataset(Dataset):
         df = pd.read_csv(file_path, delimiter=",", nrows=None)
         df = df.sort_values(by=["path_from_data_dir"])
         # audio_mask = df.is_converted_audio == True
-        audio_mask = (df.is_audio) & (df.is_converted_audio)
+        audio_mask = df.is_audio & df.is_converted_audio
         phn_mask = df.filename.str.contains(".PHN")
         sa_mask = df.filename.str.contains("SA") == False  # noqa # pylint: disable=singleton-comparison
         df = df.loc[audio_mask | phn_mask]
@@ -168,13 +175,13 @@ class DirectMaskDataset(Dataset):
         if not sa:
             df = df.loc[sa_mask]
 
-        print(df.head())
+        with pd.option_context('display.max_columns', None, 'display.max_colwidth', None):
+            print(df)
+
         # nRow, nCol = df.shape
         # print(f'There are {nRow} rows and {nCol} columns')
-        a, b = (
-            df.loc[phn_mask].path_from_data_dir,
-            df.loc[audio_mask].path_from_data_dir,
-        )
+        a = df.loc[phn_mask == True].path_from_data_dir
+        b = df.loc[audio_mask].path_from_data_dir
         assert len(a) == len(b)
         return list(zip(a, b))
 

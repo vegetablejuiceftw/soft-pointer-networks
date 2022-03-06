@@ -212,6 +212,21 @@ pycodestyle = ">=2.6.0"
 toml = "*"
 
 [[package]]
+name = "beautifulsoup4"
+version = "4.10.0"
+description = "Screen-scraping library"
+category = "main"
+optional = false
+python-versions = ">3.0.0"
+
+[package.dependencies]
+soupsieve = ">1.2"
+
+[package.extras]
+html5lib = ["html5lib"]
+lxml = ["lxml"]
+
+[[package]]
 name = "black"
 version = "20.8b1"
 description = "The uncompromising code formatter."
@@ -731,6 +746,21 @@ description = "Clean single-source support for Python 3 and 2"
 category = "main"
 optional = false
 python-versions = ">=2.6, !=3.0.*, !=3.1.*, !=3.2.*"
+
+[[package]]
+name = "gdown"
+version = "4.4.0"
+description = "Google Drive direct download of big files."
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+beautifulsoup4 = "*"
+filelock = "*"
+requests = {version = "*", extras = ["socks"]}
+six = "*"
+tqdm = "*"
 
 [[package]]
 name = "gitdb"
@@ -1372,6 +1402,14 @@ docs = ["numpydoc"]
 tests = ["pytest", "pytest-cov", "pytest-pep8"]
 
 [[package]]
+name = "pysocks"
+version = "1.7.1"
+description = "A Python SOCKS client module. See https://github.com/Anorov/PySocks for more information."
+category = "main"
+optional = false
+python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
+
+[[package]]
 name = "pysoundfile"
 version = "0.9.0.post1"
 description = "An audio library based on libsndfile, CFFI and NumPy"
@@ -1553,6 +1591,7 @@ python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, !=3.5.*"
 certifi = ">=2017.4.17"
 charset-normalizer = {version = ">=2.0.0,<2.1.0", markers = "python_version >= \"3\""}
 idna = {version = ">=2.5,<4", markers = "python_version >= \"3\""}
+PySocks = {version = ">=1.5.6,<1.5.7 || >1.5.7", optional = true, markers = "extra == \"socks\""}
 urllib3 = ">=1.21.1,<1.27"
 
 [package.extras]
@@ -1791,6 +1830,14 @@ cffi = ">=1.0"
 
 [package.extras]
 numpy = ["numpy"]
+
+[[package]]
+name = "soupsieve"
+version = "2.3.1"
+description = "A modern CSS selector implementation for Beautiful Soup."
+category = "main"
+optional = false
+python-versions = ">=3.6"
 
 [[package]]
 name = "sox"
@@ -2120,7 +2167,7 @@ torch = ["torch"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "4a116c2cf7c78c6919b8f190dcb3ac96a95ba7714b92665e616af09a4796caf9"
+content-hash = "511fff475cd47fc8e0426b2fe5bcf2fbb8cc58a54f143eef930d651fdd6f47ad"
 
 [metadata.files]
 add-trailing-comma = [
@@ -2261,6 +2308,10 @@ autoflake = [
 autopep8 = [
     {file = "autopep8-1.5.5-py2.py3-none-any.whl", hash = "sha256:9e136c472c475f4ee4978b51a88a494bfcd4e3ed17950a44a988d9e434837bea"},
     {file = "autopep8-1.5.5.tar.gz", hash = "sha256:cae4bc0fb616408191af41d062d7ec7ef8679c7f27b068875ca3a9e2878d5443"},
+]
+beautifulsoup4 = [
+    {file = "beautifulsoup4-4.10.0-py3-none-any.whl", hash = "sha256:9a315ce70049920ea4572a4055bc4bd700c940521d36fc858205ad4fcde149bf"},
+    {file = "beautifulsoup4-4.10.0.tar.gz", hash = "sha256:c23ad23c521d818955a4151a67d81580319d4bf548d3d49f4223ae041ff98891"},
 ]
 black = [
     {file = "black-20.8b1.tar.gz", hash = "sha256:1c02557aa099101b9d21496f8a914e9ed2222ef70336404eeeac8edba836fbea"},
@@ -2562,6 +2613,9 @@ funcy = [
 ]
 future = [
     {file = "future-0.18.2.tar.gz", hash = "sha256:b1bead90b70cf6ec3f0710ae53a525360fa360d306a86583adc6bf83a4db537d"},
+]
+gdown = [
+    {file = "gdown-4.4.0.tar.gz", hash = "sha256:18fc3a4da4a2273deb7aa29c7486be4df3919d904158ad6a6a3e25c8115470d7"},
 ]
 gitdb = [
     {file = "gitdb-4.0.9-py3-none-any.whl", hash = "sha256:8033ad4e853066ba6ca92050b9df2f89301b8fc8bf7e9324d412a63f8bf1a8fd"},
@@ -3089,6 +3143,11 @@ pyparsing = [
 pyrubberband = [
     {file = "pyrubberband-0.3.0.tar.gz", hash = "sha256:e20c4f94f1b208cef4b1b966b5a5424a3ad4b7b2ed12c93d6d7dca55144711e8"},
 ]
+pysocks = [
+    {file = "PySocks-1.7.1-py27-none-any.whl", hash = "sha256:08e69f092cc6dbe92a0fdd16eeb9b9ffbc13cadfe5ca4c7bd92ffb078b293299"},
+    {file = "PySocks-1.7.1-py3-none-any.whl", hash = "sha256:2725bd0a9925919b9b51739eea5f9e2bae91e83288108a9ad338b2e3a4435ee5"},
+    {file = "PySocks-1.7.1.tar.gz", hash = "sha256:3f8804571ebe159c380ac6de37643bb4685970655d3bba243530d6558b799aa0"},
+]
 pysoundfile = [
     {file = "PySoundFile-0.9.0.post1-py2.py3-none-any.whl", hash = "sha256:db14f84f4af1910f54766cf0c0f19d52414fa80aa0e11cb338b5614946f39947"},
     {file = "PySoundFile-0.9.0.post1-py2.py3.cp26.cp27.cp32.cp33.cp34.cp35.cp36.pp27.pp32.pp33-none-macosx_10_5_x86_64.macosx_10_6_intel.macosx_10_9_intel.macosx_10_9_x86_64.whl", hash = "sha256:5889138553f4e675158054f8f41c212ca76ac0e2d949e38d1dd8ded4ca3f0ce0"},
@@ -3389,6 +3448,10 @@ soundfile = [
     {file = "SoundFile-0.10.3.post1-py2.py3.cp26.cp27.cp32.cp33.cp34.cp35.cp36.pp27.pp32.pp33-none-win32.whl", hash = "sha256:4555438c2c4f02b39fea2ed40f6ddeda88a80cd1ee9dd129be4d5f5134698cc2"},
     {file = "SoundFile-0.10.3.post1-py2.py3.cp26.cp27.cp32.cp33.cp34.cp35.cp36.pp27.pp32.pp33-none-win_amd64.whl", hash = "sha256:b361d4ac1519a2e516cabafa6bf7e93492f999f35d7d25350cd87fdc3e5cb27e"},
     {file = "SoundFile-0.10.3.post1.tar.gz", hash = "sha256:490cff42650733d1832728b937fe99fa1802896f5ef4d61bcf78cf7ebecb107b"},
+]
+soupsieve = [
+    {file = "soupsieve-2.3.1-py3-none-any.whl", hash = "sha256:1a3cca2617c6b38c0343ed661b1fa5de5637f257d4fe22bd9f1338010a1efefb"},
+    {file = "soupsieve-2.3.1.tar.gz", hash = "sha256:b8d49b1cd4f037c7082a9683dfa1801aa2597fb11c3a1155b7a5b94829b4f1f9"},
 ]
 sox = [
     {file = "sox-1.4.1-py2.py3-none-any.whl", hash = "sha256:2458c8e71e229e7fb1a088874ad07906e0aedfb2874a6c4f0430efd6e7587129"},

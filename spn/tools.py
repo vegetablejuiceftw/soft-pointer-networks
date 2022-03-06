@@ -12,12 +12,9 @@ from matplotlib.pyplot import figure
 from matplotlib.ticker import FormatStrFormatter
 from torchtext.legacy.data import BucketIterator
 
-from constants import DURATION_SCALER, KNOWN_LABELS, ms_per_step, POS_DIM, WIN_STEP
-from dataset_loader import dedupe, find_borders, Utterance
-from models.components import Attention
-
-
-test_dataset, transcription_with_duration = [], []
+from spn.constants import DURATION_SCALER, KNOWN_LABELS, ms_per_step, POS_DIM, WIN_STEP
+from spn.dataset_loader import dedupe, find_borders, Utterance
+from spn.models.components import Attention
 
 
 @contextlib.contextmanager
@@ -308,7 +305,7 @@ def draw_audio(model, dataset, index):
     axarr[1].plot(truth, "g", label="Truth")
     axarr[1].plot(prediction, "r", label="Prediction")
     axarr[1].legend(loc="upper right")
-    axarr[2].imshow(transcription_with_duration.T, origin="lower", aspect="auto", cmap=cm.winter)
+    # axarr[2].imshow(transcription_with_duration.T, origin="lower", aspect="auto", cmap=cm.winter)
     axarr[3].imshow(transcription_truth.T, origin="lower", aspect="auto", cmap=cm.winter)
 
 
@@ -317,9 +314,9 @@ def show_audio(model, dataset, name, plot_only=False, duration_model=None):
     model.eval()
     # show one
     i = 36
-    inp = test_dataset[i].features
-    out_vec = test_dataset.out_vec[i]
-    transcription = test_dataset.in_transcription[i]
+    inp = dataset[i].features
+    out_vec = dataset.out_vec[i]
+    transcription = dataset.in_transcription[i]
     _res = model.forward(transcription.unsqueeze(0), None, inp.unsqueeze(0), None)
     _res = f.softmax(_res, dim=2)
     result = _res[0, :, :]

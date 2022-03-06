@@ -4,7 +4,7 @@ import torch
 import torch.nn.functional as f
 from torch import nn
 
-from dataset_loader import UtteranceBatch
+from spn.dataset_loader import UtteranceBatch
 
 
 class MaskedLoss(nn.Module):
