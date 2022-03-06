@@ -7,14 +7,14 @@ from random import Random
 from typing import List, NamedTuple
 
 import numpy as np
-import torch
-import torch.nn as nn
-from torch.utils.data import Dataset
-
 import pandas as pd
+import pyloudnorm as pyln
 import pyrubberband as pyrb
 import soundfile as sf
+import torch
+import torch.nn as nn
 from python_speech_features import logfbank, mfcc
+from torch.utils.data import Dataset
 from torchtext.legacy.data import BucketIterator, RawField
 
 from constants import (
@@ -24,16 +24,15 @@ from constants import (
     KNOWN_LABELS,
     MAP_LABELS,
     MERGE_DOUBLES,
+    ms_per_step,
     NO_BORDER_MAPPING,
     POS_DIM,
     POS_SCALE,
     TRANSFORM_MAPPING,
     WIN_SIZE,
     WIN_STEP,
-    ms_per_step,
 )
 
-# pyln
 
 class AudioCaching:
     BASE_FOLDER = "/content/TIMIT-PLUS"
@@ -62,8 +61,7 @@ class AudioCaching:
         if os.path.isfile(cache_file_path):
             print("+", cache_file_path)
             return cls.load(cache_file_path)
-        else:
-            print("-", file_path)
+        print("-", file_path)
 
     @classmethod
     def load(cls, file_path):
@@ -114,9 +112,8 @@ def find_borders(output_ids, original_mapping):
     arr = np.append(arr, last)
     flat_ids = np.array(dedupe(output_ids))
     ids = np.array([voc for voc, end in original_mapping])
-    assert (ids.shape == flat_ids.shape) and (
-        ids != flat_ids
-    ).sum() == 0, f"[error] Mapping and Output have same composition {ids.shape} {flat_ids.shape}"
+    assert (ids.shape == flat_ids.shape) and (ids != flat_ids).sum(
+    ) == 0, f"[error] Mapping and Output have same composition {ids.shape} {flat_ids.shape}"
     a, b = np.array([end for voc, end in original_mapping]), arr
 
     diff = a - b
@@ -124,6 +121,7 @@ def find_borders(output_ids, original_mapping):
 
 
 class PositionalEncodingLabeler(nn.Module):
+
     def __init__(self, d_model, dropout=0.1, scale=1, max_len=2048):
         super().__init__()
         self.scale = scale
@@ -157,28 +155,28 @@ class DirectMaskDataset(Dataset):
 
     @classmethod
     def load_csv(cls, prefix, sa=False):
+        """Filters out the files names of phonetic and sound data in pairs."""
         file_path = join(cls.base, f"{prefix}_data.csv")
-        """ Filters out the files names of phonetic and sound data in pairs"""
         df = pd.read_csv(file_path, delimiter=",", nrows=None)
         df = df.sort_values(by=["path_from_data_dir"])
         # audio_mask = df.is_converted_audio == True
         audio_mask = (df.is_audio) & (df.is_converted_audio)
         phn_mask = df.filename.str.contains(".PHN")
-        SA_mask = df.filename.str.contains("SA") == False
+        sa_mask = df.filename.str.contains("SA") == False  # noqa # pylint: disable=singleton-comparison
         df = df.loc[audio_mask | phn_mask]
         print("SA", sa)
         if not sa:
-            df = df.loc[SA_mask]
+            df = df.loc[sa_mask]
 
         print(df.head())
-        nRow, nCol = df.shape
+        # nRow, nCol = df.shape
         # print(f'There are {nRow} rows and {nCol} columns')
-        A, B = (
+        a, b = (
             df.loc[phn_mask].path_from_data_dir,
             df.loc[audio_mask].path_from_data_dir,
         )
-        assert len(A) == len(B)
-        return list(zip(A, B))
+        assert len(a) == len(b)
+        return list(zip(a, b))
 
     @staticmethod
     def get_name(file_name):
@@ -186,6 +184,7 @@ class DirectMaskDataset(Dataset):
         name = name.split(".")[0]
         return a, b, name
 
+    @staticmethod
     def json_to_vec(arr):
         return [np.array([MAP_LABELS[tag][0] for tag in tags]) for tags in arr]
 
@@ -216,7 +215,7 @@ class DirectMaskDataset(Dataset):
             # unholy.add((prev, tag))
 
             if prev == tag and MERGE_DOUBLES or unholy_combination or q_tag:
-                tag_id, ems = tag_mapping[-1]
+                tag_id, _ems = tag_mapping[-1]
                 tag_mapping[-1] = (tag_id, end_ms)
 
             else:
@@ -252,7 +251,13 @@ class DirectMaskDataset(Dataset):
         return value
 
     def __init__(
-        self, files, limit=None, augment=False, duplicate=1, seed="42", device=torch.device("cpu"),
+        self,
+        files,
+        limit=None,
+        augment=False,
+        duplicate=1,
+        seed="42",
+        device=torch.device("cpu"),
     ):
         self.device = device
         random = Random(seed)  # init random generator
@@ -284,17 +289,18 @@ class DirectMaskDataset(Dataset):
 
         for i, (label_file, audio_file) in enumerate(files * duplicate):
             assert self.get_name(label_file) == self.get_name(audio_file)
-            a, b, c = self.get_name(label_file)
-            f"{a}_{b}_{c}_{i}"
+            # a, b, c = self.get_name(label_file)
+            # f"{a}_{b}_{c}_{i}"
 
             label_file = os.path.join(base, "data", label_file)
             audio_file = os.path.join(base, "data", audio_file)
 
             def loader():
-                return AudioCaching.load(audio_file)
+                return AudioCaching.load(audio_file)  # noqa # pylint: disable=cell-var-from-loop
 
             audio = self.get_set(audio_file, loader)
-            audio_scaling, rate = 32768.0 / 512, 16000
+            # _audio_scaling, rate = 32768.0 / 512, 16000
+            rate = 16000
             audio_base_len = len(audio)
 
             meter = pyln.Meter(rate)  # create BS.1770 meter
@@ -320,8 +326,8 @@ class DirectMaskDataset(Dataset):
                     continue
                 duplicate_set.add(duplication_key)
 
-                def audio_pitch_shift():
-                    return pyrb.pitch_shift(audio, rate, pitch)
+                # def audio_pitch_shift():
+                #     return pyrb.pitch_shift(audio, rate, pitch)
 
                 cache_audio = AudioCaching.get(audio_file, key_pitch)
                 got_pitch = cache_audio is not None
@@ -341,10 +347,19 @@ class DirectMaskDataset(Dataset):
                 stretch = len(audio) / audio_base_len
 
             fbank_feat = logfbank(
-                audio, rate, winlen=WIN_SIZE, winstep=WIN_STEP, nfilt=INPUT_SIZE,
+                audio,
+                rate,
+                winlen=WIN_SIZE,
+                winstep=WIN_STEP,
+                nfilt=INPUT_SIZE,
             )  # TODO: remove scaling
             mfcc_feat = mfcc(
-                audio, rate, winlen=WIN_SIZE, winstep=WIN_STEP, nfilt=32, numcep=16,
+                audio,
+                rate,
+                winlen=WIN_SIZE,
+                winstep=WIN_STEP,
+                nfilt=32,
+                numcep=16,
             )  # TODO: remove scaling
 
             # some audio instances are too short for the audio transcription
@@ -369,10 +384,12 @@ class DirectMaskDataset(Dataset):
                 length = int(end_ms / step_size)
 
             (tag_ints, tag_vecs, tag_mapping, transcription, transcription_ints) = self.process_audio(
-                labels, length, step_size,
+                labels,
+                length,
+                step_size,
             )
-            fbank_feat = fbank_feat[: len(tag_ints)]
-            mfcc_feat = mfcc_feat[: len(tag_ints)]
+            fbank_feat = fbank_feat[:len(tag_ints)]
+            mfcc_feat = mfcc_feat[:len(tag_ints)]
 
             length = fbank_feat.shape[0]
             length_ms = length * step_size
@@ -391,7 +408,9 @@ class DirectMaskDataset(Dataset):
                     d = abs(diff).max()
                     if d > 15:
                         print(
-                            f"[DIFF-ERROR] diff is bigger {d} > 15", np.where(abs(diff) > 15), diff.shape,
+                            f"[DIFF-ERROR] diff is bigger {d} > 15",
+                            np.where(abs(diff) > 15),
+                            diff.shape,
                         )
                         print("\t", tag_mapping[-1], length_ms)
                         print("\t", np.round(a[-5:], 0))
@@ -442,20 +461,20 @@ class DirectMaskDataset(Dataset):
         self.border = border
         self.weight = stack(weight, torch.FloatTensor)
 
-        FEATURES = RawField(postprocessing=self.features_batch_process)
-        FEATURES_MFCC = RawField(postprocessing=self.features_batch_process)
-        LABEL = RawField(postprocessing=self.features_batch_process)
-        TRANSCRIPTION_INT = RawField(postprocessing=self.features_batch_process)
-        TRANSCRIPTION = RawField()
-        LABEL_VEC = RawField()
-        OUT_MAP = RawField()
-        OUT_DUR = RawField(postprocessing=self.features_batch_process)
-        IN_TRANS = RawField(postprocessing=self.features_batch_process)
-        INDEX = RawField()
-        KEY = RawField()
-        POSITION = RawField(postprocessing=self.features_batch_process)
-        BORDER = RawField(postprocessing=self.features_batch_process)
-        WEIGHT = RawField(postprocessing=self.features_batch_process)
+        FEATURES = RawField(postprocessing=self.features_batch_process)  # noqa
+        FEATURES_MFCC = RawField(postprocessing=self.features_batch_process)  # noqa
+        LABEL = RawField(postprocessing=self.features_batch_process)  # noqa
+        TRANSCRIPTION_INT = RawField(postprocessing=self.features_batch_process)  # noqa
+        TRANSCRIPTION = RawField()  # noqa
+        LABEL_VEC = RawField()  # noqa
+        OUT_MAP = RawField()  # noqa
+        OUT_DUR = RawField(postprocessing=self.features_batch_process)  # noqa
+        IN_TRANS = RawField(postprocessing=self.features_batch_process)  # noqa
+        INDEX = RawField()  # noqa
+        KEY = RawField()  # noqa
+        POSITION = RawField(postprocessing=self.features_batch_process)  # noqa
+        BORDER = RawField(postprocessing=self.features_batch_process)  # noqa
+        WEIGHT = RawField(postprocessing=self.features_batch_process)  # noqa
 
         setattr(FEATURES, "is_target", False)
         setattr(FEATURES_MFCC, "is_target", False)
@@ -518,14 +537,22 @@ class DirectMaskDataset(Dataset):
         # TODO: could we, should we use pack_padded_sequence
         padded = nn.utils.rnn.pad_sequence(batch, batch_first=True).to(self.device)
         lens = torch.tensor([len(item) for item in batch]).to(self.device)
-        b, max_len, *f = padded.shape
+        _b, max_len, *_f = padded.shape
         return UtteranceBatch(
-            padded, torch.arange(max_len).expand(len(lens), max_len).to(self.device) < lens.unsqueeze(1), lens,
+            padded,
+            torch.arange(max_len).expand(len(lens), max_len).to(self.device) < lens.unsqueeze(1),
+            lens,
         )
 
     def batch(
-        self, batch_size=128, sort_key=None, sort=False, shuffle=True, sort_within_batch=True,
+        self,
+        batch_size=128,
+        sort_key=None,
+        sort=False,
+        shuffle=True,
+        sort_within_batch=True,
     ):
+
         def default_sort(x):
             return len(x.features)
 

@@ -2,10 +2,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as fun
 
-from components import Decoder, Encoder
+from .components import Decoder, Encoder
 
 
 class DurationNetwork(nn.Module):
+
     def __init__(
         self,
         embedding_size,
@@ -25,15 +26,28 @@ class DurationNetwork(nn.Module):
         self.mode = "fast"
 
         self.encoder = Encoder(
-            hidden_size=embedding_size, embedding_size=embedding_size, num_layers=2, dropout=dropout, time_scale=None,
+            hidden_size=embedding_size,
+            embedding_size=embedding_size,
+            num_layers=2,
+            dropout=dropout,
+            time_scale=None,
         )
 
         self.encoder_transcription = Encoder(
-            hidden_size=hidden_size, embedding_size=embedding_size, num_layers=2, dropout=dropout, time_scale=None,
+            hidden_size=hidden_size,
+            embedding_size=embedding_size,
+            num_layers=2,
+            dropout=dropout,
+            time_scale=None,
         )
 
         self.decoder_transcription = Decoder(
-            embedding_size, hidden_size, hidden_size, num_layers=2, dropout=dropout, time_scale=None,
+            embedding_size,
+            hidden_size,
+            hidden_size,
+            num_layers=2,
+            dropout=dropout,
+            time_scale=None,
         )
 
         self.encoder_audio = Encoder(
@@ -45,7 +59,12 @@ class DurationNetwork(nn.Module):
         )
 
         self.decoder_audio = Decoder(
-            embedding_size, hidden_size, output_size=hidden_size, num_layers=2, dropout=dropout, time_scale=None,
+            embedding_size,
+            hidden_size,
+            output_size=hidden_size,
+            num_layers=2,
+            dropout=dropout,
+            time_scale=None,
         )
 
         self.direct = nn.Linear(embedding_size, hidden_size)
@@ -72,7 +91,11 @@ class DurationNetwork(nn.Module):
         output = self.direct(encoded_transcription)
 
         output_audio, hidden_audio = self.decoder_audio(
-            encoded_transcription, mask, hidden_audio, encoded_audio, masks_audio,
+            encoded_transcription,
+            mask,
+            hidden_audio,
+            encoded_audio,
+            masks_audio,
         )
 
         if self.mode == "audio":
@@ -80,12 +103,20 @@ class DurationNetwork(nn.Module):
 
         elif self.mode == "trans":
             output, _ = self.decoder_transcription(
-                encoded_transcription, mask, hidden_transcription, encoder_transcription_extra, mask,
+                encoded_transcription,
+                mask,
+                hidden_transcription,
+                encoder_transcription_extra,
+                mask,
             )
 
         elif self.mode == "fast":
             output_transcription, _ = self.decoder_transcription(
-                encoded_transcription, mask, hidden_transcription, encoder_transcription_extra, mask,
+                encoded_transcription,
+                mask,
+                hidden_transcription,
+                encoder_transcription_extra,
+                mask,
             )
 
             output = torch.cat((output_transcription, output_audio), 2)
@@ -94,11 +125,15 @@ class DurationNetwork(nn.Module):
         elif self.mode == "chain":
             # mangle the output to be acceptable for one more pass through the
             # encoders
-            output_audio, hidden_audio = self.chain(output_audio), hidden_audio
+            output_audio = self.chain(output_audio)
 
             # pass hidden audio as a hint
             output, hidden_transcription = self.decoder_transcription(
-                output_audio, mask, hidden_audio, encoder_transcription_extra, mask,
+                output_audio,
+                mask,
+                hidden_audio,
+                encoder_transcription_extra,
+                mask,
             )
 
         output = torch.log1p(fun.relu(output))
@@ -108,9 +143,8 @@ class DurationNetwork(nn.Module):
         output = fun.relu(output)
 
         total_duration = (
-            masks_audio.sum(1) * self.ms_per_step
-            if masks_audio is not None
-            else features_audio.shape[1] * self.ms_per_step
+            masks_audio.sum(1) * self.ms_per_step if masks_audio is not None else features_audio.shape[1] *
+            self.ms_per_step
         )
         if mask is not None:
             output = output * mask.unsqueeze(2).float()

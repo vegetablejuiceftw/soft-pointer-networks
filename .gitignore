@@ -8,13 +8,10 @@ html
 
 source
 data
-models
 
 # ignore db files
 *.db
 resources/*.csv
-
-/models
 
 # Distribution / packkaging
 .Python

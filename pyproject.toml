@@ -29,6 +29,7 @@ pyrubberband = "^0.3.0"
 kaggle = "^1.5.12"
 torchtext = "^0.11.2"
 pandas = "^1.4.1"
+pyloudnorm = "^0.1.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "==6.*"

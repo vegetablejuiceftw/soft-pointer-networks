@@ -84,4 +84,5 @@ pylint:
     options:
         max-line-length: 140
         max-args: 10
-        max-locals: 32
+        max-locals: 42
+        max-statements: 96

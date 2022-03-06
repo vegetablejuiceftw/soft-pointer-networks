@@ -23,6 +23,7 @@ class ModeSwitcherBase:
     """
 
     class Mode(Enum):
+
         @classmethod
         def keys(cls):
             return list(cls.__members__.keys())
@@ -32,8 +33,8 @@ class ModeSwitcherBase:
         if hasattr(self.Mode, cleaned):
             mode = getattr(self.Mode, cleaned)
             if "is_" in item:
-                return self.mode == mode
-            elif "with_" in item:
+                return self.mode == mode  # pylint: disable=access-member-before-definition
+            if "with_" in item:
                 self.mode = mode
                 return self
         # noop

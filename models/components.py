@@ -7,6 +7,7 @@ import torch.nn.functional as fun
 
 
 class PositionalEncoding(nn.Module):
+
     def __init__(self, d_model, dropout=0.1, scale=1, max_len=2048):
         super().__init__()
         self.scale = scale
@@ -37,7 +38,7 @@ class PositionalEncoding(nn.Module):
         if not self.scale:
             return x
         x = x.transpose(0, 1)
-        x = x + self.pe[: x.size(0), :]
+        x = x + self.pe[:x.size(0), :]
         x = x.transpose(0, 1)
         return self.dropout(x)
 
@@ -107,8 +108,15 @@ class Attention(nn.Module):
 
 
 class Decoder(nn.Module):
+
     def __init__(
-        self, embedding_size, hidden_size, output_size, num_layers=2, dropout=0.1, time_scale=1,
+        self,
+        embedding_size,
+        hidden_size,
+        output_size,
+        num_layers=2,
+        dropout=0.1,
+        time_scale=1,
     ):
         super().__init__()
         self.hidden_size = hidden_size
@@ -125,14 +133,21 @@ class Decoder(nn.Module):
         rnn_output, hidden_state = self.gru(carrier, hidden_state)
         rnn_output = self.pos_encode(rnn_output)
 
-        rnn_output, attn = self.attn(rnn_output, mask_trans, context, mask_audio)
+        rnn_output, _attn = self.attn(rnn_output, mask_trans, context, mask_audio)
         rnn_output = self.out(rnn_output)
         return rnn_output, hidden_state
 
 
 class Encoder(nn.Module):
+
     def __init__(
-        self, hidden_size, embedding_size, out_dim=None, num_layers=2, dropout=0.1, time_scale=1,
+        self,
+        hidden_size,
+        embedding_size,
+        out_dim=None,
+        num_layers=2,
+        dropout=0.1,
+        time_scale=1,
     ):
         super().__init__()
         self.hidden_size = hidden_size
@@ -142,7 +157,12 @@ class Encoder(nn.Module):
         self.batchnorm = nn.BatchNorm1d(embedding_size)
         # Embedding layer that will be shared with Decoder
         self.gru = nn.GRU(
-            embedding_size, hidden_size, num_layers=num_layers, dropout=dropout, bidirectional=True, batch_first=True,
+            embedding_size,
+            hidden_size,
+            num_layers=num_layers,
+            dropout=dropout,
+            bidirectional=True,
+            batch_first=True,
         )
         self.fc = nn.Linear(hidden_size * 2, out_dim or hidden_size)
 
@@ -164,12 +184,18 @@ class Encoder(nn.Module):
 
 
 class LightLSTM(nn.Module):
+
     def __init__(self, feature_dim, out_dim, dropout_prob=0.05, with_hidden=False):
         super().__init__()
         self.batchnorm = nn.BatchNorm1d(feature_dim)
         self.hidden_size = 128
         self.rnn = nn.LSTM(
-            feature_dim, self.hidden_size, batch_first=True, bidirectional=True, num_layers=2, dropout=dropout_prob,
+            feature_dim,
+            self.hidden_size,
+            batch_first=True,
+            bidirectional=True,
+            num_layers=2,
+            dropout=dropout_prob,
         )
         self.fc = nn.Linear(self.hidden_size * 2, out_dim)
         self.with_hidden = with_hidden

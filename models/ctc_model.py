@@ -1,11 +1,18 @@
 import torch.nn as nn
 
-from components import Decoder, Encoder, LightLSTM, PositionalEncoding
+from .components import Decoder, Encoder, LightLSTM, PositionalEncoding
 
 
 class MultiContextAttentionAudio(nn.Module):
+
     def __init__(
-        self, embedding_transcription_size, embedding_audio_size, hidden_size, vocab_size, device="cpu", dropout=0.1,
+        self,
+        embedding_transcription_size,
+        embedding_audio_size,
+        hidden_size,
+        vocab_size,
+        device="cpu",
+        dropout=0.1,
     ):
         super().__init__()
         self.device = device
@@ -36,7 +43,11 @@ class MultiContextAttentionAudio(nn.Module):
         )
 
         self.encoder_audio = Encoder(
-            hidden_size=hidden_size, embedding_size=embedding_audio_size, num_layers=2, dropout=dropout, time_scale=1,
+            hidden_size=hidden_size,
+            embedding_size=embedding_audio_size,
+            num_layers=2,
+            dropout=dropout,
+            time_scale=1,
         )
 
         self.decoder_audio_to_audio = Decoder(
@@ -56,7 +67,10 @@ class MultiContextAttentionAudio(nn.Module):
 
         # output_size=vocab_size
         encoded_audio, hidden = self.encoder_audio_initial(
-            features_transcription, mask_transcription, features_audio, mask_audio,
+            features_transcription,
+            mask_transcription,
+            features_audio,
+            mask_audio,
         )
 
         if self.mode == "direct":

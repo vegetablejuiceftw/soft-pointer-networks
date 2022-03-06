@@ -5,39 +5,33 @@ from random import sample
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import torch.nn.functional as F
+import torch.nn.functional as f
+from fastdtw import dtw as slowdtw
 from matplotlib import cm
 from matplotlib.pyplot import figure
 from matplotlib.ticker import FormatStrFormatter
-
-from fastdtw import dtw as slowdtw
 from torchtext.legacy.data import BucketIterator
 
-from dataset_loader import Utterance, dedupe, find_borders
+from constants import DURATION_SCALER, KNOWN_LABELS, ms_per_step, POS_DIM, WIN_STEP
+from dataset_loader import dedupe, find_borders, Utterance
 from models.components import Attention
-from constants import (
-    DURATION_SCALER,
-    KNOWN_LABELS,
-    POS_DIM,
-    WIN_STEP,
-    ms_per_step,
-)
 
-# test_dataset
-# transcription_with_duration
+
+test_dataset, transcription_with_duration = [], []
+
 
 @contextlib.contextmanager
 def nullcontext():
     yield None
 
 
-def get_aligned_result(result: np.ndarray, labels: np.ndarray) -> np.ndarray:
-    step_count, feature_count = result.shape
+def get_aligned_result(result: np.ndarray, labels: np.ndarray):
+    step_count, _feature_count = result.shape
     labelss = labels
     # result = result + np.random.random_sample(result.shape) / 5
     # labelss = labels + np.random.random_sample(labels.shape) / 5
     # distance, path = __dtw(result, labelss, dist=dist)
-    distance, path = slowdtw(result, labelss, dist=2)
+    _distance, path = slowdtw(result, labelss, dist=2)
     # warped_result = np.vstack([labels[index,:] for _, index in path])
     # return warped_result, None
     # if len(path) != step_count:
@@ -87,18 +81,15 @@ def find_borders_pathed(path: list, original_mapping: list):
         last = label_id
 
     borders_pred = np.array(borders)
-    borders_truth = np.array(
-        [
-            end
-            for i, (voc, end) in enumerate(original_mapping)
-            if original_mapping[min(i + 1, len(original_mapping) - 1)][0] != voc
-        ],
-    )
+    borders_truth = np.array([
+        end for i, (voc, end) in enumerate(original_mapping)
+        if original_mapping[min(i + 1,
+                                len(original_mapping) - 1)][0] != voc
+    ], )
 
-    assert (
-        borders_pred.shape == borders_truth.shape,
-        f"[error] Mapping and Output have same composition {borders_pred.shape} {borders_truth.shape}",
-    )
+    assert \
+        borders_pred.shape == borders_truth.shape,\
+        f"[error] Mapping and Output have same composition {borders_pred.shape} {borders_truth.shape}"
 
     diff = borders_truth - borders_pred
     return None, None, diff
@@ -117,14 +108,14 @@ def evaluate_result(model, iterator, lower=True, duration_model=None):
     cache_hits = 0
     for batch in iterator:
         features_audio = batch.features.padded
-        batch_s, time_s, feat_s = features_audio.shape
+        batch_s, _time_s, _feat_s = features_audio.shape
         masks_audio = batch.features.masks
         features_transcription = batch.in_transcription.padded
         masks_transcription = batch.in_transcription.masks
         labels = batch.labels.padded
 
         full_result = model(features_transcription, masks_transcription, features_audio, masks_audio)
-        full_result = F.softmax(full_result, dim=2)
+        full_result = f.softmax(full_result, dim=2)
 
         full_result_cls = torch.argmax(full_result, dim=2)
         full_result = full_result.cpu().detach().numpy()
@@ -148,7 +139,10 @@ def evaluate_result(model, iterator, lower=True, duration_model=None):
                     transcription = duration_cache[key]
                 else:
                     res_batch = duration_model.forward(
-                        batch.transcription[i].unsqueeze(0), None, audio.unsqueeze(0), None,
+                        batch.transcription[i].unsqueeze(0),
+                        None,
+                        audio.unsqueeze(0),
+                        None,
                     )
                     prediction = (res_batch).squeeze(0).detach().cpu().numpy() * DURATION_SCALER
                     transcription = generate_duration_transcription(transcription, prediction)
@@ -186,14 +180,17 @@ def evaluate_result(model, iterator, lower=True, duration_model=None):
 
             try:
                 if path:
-                    a, b, d = find_borders_pathed(path, batch.out_map[i])
+                    _a, _b, d = find_borders_pathed(path, batch.out_map[i])
                 else:
-                    a, b, d = find_borders(wmax, batch.out_map[i])
+                    _a, _b, d = find_borders(wmax, batch.out_map[i])
             except Exception as e:
                 print("[Exception]")
                 # print(np.argmax(transcription, axis=1))
                 print(
-                    labels_cls.shape, wmax.shape, transcription.shape, len(batch.out_map[i]),
+                    labels_cls.shape,
+                    wmax.shape,
+                    transcription.shape,
+                    len(batch.out_map[i]),
                 )
                 raise e
             diff_ranking.append((abs(d.max()), idx))
@@ -220,12 +217,14 @@ def display_diff(errors, name="", unit="ms", plotting=False):
     hist = np.cumsum(hist)
 
     print(
-        f"[{name}] DIFF abs mean: {abs(errors).mean():.2f}{unit} ({errors.mean():.2f}) min:{abs(errors).min():.2f}{unit} max:{abs(errors).max():.2f}{unit}",
+        f"[{name}] DIFF abs mean: {abs(errors).mean():.2f}{unit} "
+        f"({errors.mean():.2f}) min:{abs(errors).min():.2f}{unit} "
+        f"max:{abs(errors).max():.2f}{unit}",
     )
     rows = list(zip(hist, bins, bins[1:]))
-    for R in zip(rows[::2], rows[1::2]):
+    for r in zip(rows[::2], rows[1::2]):
         s = ""
-        for h, b, e in R:
+        for h, _b, e in r:
             s += f"\t{h:.2f}%\t < {e:.0f}{unit}\t"
         print(s)
 
@@ -233,9 +232,10 @@ def display_diff(errors, name="", unit="ms", plotting=False):
     # print([e for h, b, e in rows])
 
     if plotting:
-        f, axarr = plt.subplots(1, 2, figsize=(10, 3))
+        _f, axarr = plt.subplots(1, 2, figsize=(10, 3))
         axarr[0].bar(
-            range(len(bins) - 1), hist,
+            range(len(bins) - 1),
+            hist,
         )
         axarr[0].set_xticklabels(bins, fontdict=None, minor=False)
         axarr[1].hist(np.clip(errors, -70, 70), bins=5)
@@ -245,12 +245,8 @@ def draw_duration(model, dataset, index):
     model.eval()
     inp = dataset[index]
     prediction = (
-        model.forward(inp.in_transcription.unsqueeze(0), None, inp.features.unsqueeze(0), None)
-        .squeeze(0)
-        .detach()
-        .cpu()
-        .numpy()
-        * DURATION_SCALER
+        model.forward(inp.in_transcription.unsqueeze(0), None, inp.features.unsqueeze(0),
+                      None).squeeze(0).detach().cpu().numpy() * DURATION_SCALER
     )
 
     inputs = inp.features.detach().cpu().numpy()
@@ -261,7 +257,8 @@ def draw_duration(model, dataset, index):
     print(total_duration, sum(prediction))
     prediction = prediction / sum(prediction) * total_duration
     transcription_with_duration = generate_duration_transcription(
-        inp.in_transcription.detach().cpu().numpy(), prediction,
+        inp.in_transcription.detach().cpu().numpy(),
+        prediction,
     )
 
     f, axarr = plt.subplots(4, figsize=(8, 8))
@@ -306,7 +303,7 @@ def draw_audio(model, dataset, index):
     truth = (ds.out_duration).detach().cpu().numpy() * DURATION_SCALER
     trans = trans.detach().cpu().numpy()
 
-    f, axarr = plt.subplots(4, figsize=(10, 4))
+    _f, axarr = plt.subplots(4, figsize=(10, 4))
     axarr[0].imshow(inputs.T, origin="lower", aspect="auto", cmap=cm.winter)
     axarr[1].plot(truth, "g", label="Truth")
     axarr[1].plot(prediction, "r", label="Prediction")
@@ -324,16 +321,16 @@ def show_audio(model, dataset, name, plot_only=False, duration_model=None):
     out_vec = test_dataset.out_vec[i]
     transcription = test_dataset.in_transcription[i]
     _res = model.forward(transcription.unsqueeze(0), None, inp.unsqueeze(0), None)
-    _res = F.softmax(_res, dim=2)
+    _res = f.softmax(_res, dim=2)
     result = _res[0, :, :]
     result_maximized = result.clone().detach().cpu().numpy()
     ids = np.argmax(result_maximized, axis=1)
     result_maximized = result_maximized * 0
     for t, i in enumerate(ids):
         result_maximized[t, i] = 1
-    warped_result, path = get_aligned_result(result.detach().cpu().numpy(), transcription.detach().cpu().numpy())
+    warped_result, _path = get_aligned_result(result.detach().cpu().numpy(), transcription.detach().cpu().numpy())
 
-    f, axarr = plt.subplots(4, figsize=(12, 12), sharex=True)
+    _f, axarr = plt.subplots(4, figsize=(12, 12), sharex=True)
     axarr[0].imshow(inp.cpu().numpy().T, origin="lower", aspect="auto")  # , cmap=cm.winter)
     axarr[1].imshow(result.detach().cpu().numpy().T, origin="lower", aspect="auto")  # , cmap=cm.winter)
     axarr[2].imshow(result_maximized.T, origin="lower", aspect="auto")  # , cmap=cm.winter)
@@ -343,7 +340,7 @@ def show_audio(model, dataset, name, plot_only=False, duration_model=None):
     axarr[2].title.set_text("CTC most probable phoneme")
     axarr[3].title.set_text("Phoneme ground truth")
 
-    f, axarr = plt.subplots(3, figsize=(12, 8), sharex=True)
+    _f, axarr = plt.subplots(3, figsize=(12, 8), sharex=True)
     axarr[0].imshow(result.detach().cpu().numpy().T, origin="lower", aspect="auto")  # , cmap=cm.winter)
     axarr[1].imshow(warped_result.T, origin="lower", aspect="auto")  # , cmap=cm.winter)
     axarr[2].imshow(out_vec.cpu().numpy().T, origin="lower", aspect="auto")  # , cmap=cm.winter)
@@ -357,10 +354,18 @@ def show_audio(model, dataset, name, plot_only=False, duration_model=None):
     # # # # # #
     # difference percentages
     dataset_iter = BucketIterator(
-        dataset, batch_size=64, sort_key=lambda x: len(x.features), sort=False, shuffle=True, sort_within_batch=True,
+        dataset,
+        batch_size=64,
+        sort_key=lambda x: len(x.features),
+        sort=False,
+        shuffle=True,
+        sort_within_batch=True,
     )
     dtw_errors, detection_errors, diff = evaluate_result(
-        model, dataset_iter, lower=False, duration_model=duration_model,
+        model,
+        dataset_iter,
+        lower=False,
+        duration_model=duration_model,
     )
     display_error(dtw_errors, "DETECTION+DTW")
     display_error(detection_errors, "DETECTION")
@@ -408,13 +413,18 @@ show_duration_og = show_duration
 
 
 def show_position(
-    model, dataset, duration_combined_model=None, sample_size=2000, report_error=750, skip=False,
+    model,
+    dataset,
+    duration_combined_model=None,
+    sample_size=2000,
+    report_error=750,
+    skip=False,
 ):
     model.eval()
     if duration_combined_model is not None:
         duration_combined_model.eval()
 
-    torch.cumsum(torch.ones(2 ** 14), 0).unsqueeze(1) - 1
+    # torch.cumsum(torch.ones(2 ** 14), 0).unsqueeze(1) - 1
     print("dataset len", len(dataset))
 
     diffs = []
@@ -450,16 +460,10 @@ def show_position(
                 after = new[i + 1] if i + 1 < len(new) else v
                 if v < prev or v > after:
                     if duration is None:
-                        duration = (
-                            (
-                                duration_combined_model(transcription.unsqueeze(0), None, audio.unsqueeze(0), None)
-                                * DURATION_SCALER
-                            )
-                                .view(-1)
-                                .detach()
-                                .cpu()
-                                .numpy()[:-1]
-                        )
+                        duration = ((
+                            duration_combined_model(transcription.unsqueeze(0), None, audio.unsqueeze(0), None) *
+                            DURATION_SCALER
+                        ).view(-1).detach().cpu().numpy()[:-1])
                     v = prev + duration[i - 1]
                     switched = True
                 new[i] = v
@@ -480,9 +484,6 @@ def show_position(
 
 
 def location_fix(positions, truth, durations, end_of_audio):
-    pass
-
-    prev = 0
     difos = []
     visited = []
     for _ in range(10):
@@ -493,9 +494,9 @@ def location_fix(positions, truth, durations, end_of_audio):
                 continue
             prev = positions[i - 1] if i >= 1 else 0
             after = positions[i + 1] if i + 1 < len(positions) else end_of_audio
-            Y = (prev + after - 0.0001) / 2
-            Y = prev + durations[i]
-            diff = abs(v - Y)
+            # y = (prev + after - 0.0001) / 2
+            y = prev + durations[i]
+            diff = abs(v - y)
             if diff > worst_diff:
                 worst_diff, worst_index = diff, i
 
@@ -531,7 +532,9 @@ def location_fix(positions, truth, durations, end_of_audio):
     return positions, difos
 
 
-def show_position_batched(model, dataset, duration_combined_model=None, report_error=750, plotting=False):
+def show_position_batched(
+    model, dataset, duration_combined_model=None, report_error=750, plotting=False
+):  # noqa: MC0001
     model.eval()
     if duration_combined_model is not None:
         duration_combined_model.eval()
@@ -549,22 +552,17 @@ def show_position_batched(model, dataset, duration_combined_model=None, report_e
         borders = batch.border.padded.cpu().detach().numpy()
         border_lengths = batch.border.lengths.cpu().detach().numpy()
 
-        batch_s, time_s, feat_s = features_audio.shape
+        batch_s, _time_s, _feat_s = features_audio.shape
 
         borders_predicted = (
             model(features_transcription, masks_transcription, features_audio, masks_audio).cpu().detach().numpy()
         )
 
         if duration_combined_model is not None:
-            duration_batch = (
-                (
-                    duration_combined_model(features_transcription, masks_transcription, features_audio, masks_audio)
-                    * DURATION_SCALER
-                )
-                    .detach()
-                    .cpu()
-                    .numpy()
-            )
+            duration_batch = ((
+                duration_combined_model(features_transcription, masks_transcription, features_audio, masks_audio) *
+                DURATION_SCALER
+            ).detach().cpu().numpy())
 
         for i in range(batch_s):
             label_id = [l_id for l_id, ms in batch.out_map[i]]
@@ -620,7 +618,8 @@ def show_position_batched(model, dataset, duration_combined_model=None, report_e
         for func in [np.max, np.mean]:
             print(func)
             mean_phoneme_dur = sorted(
-                [[f"{KNOWN_LABELS[pid].ljust(4)}", func(val)] for pid, val in phoneme_map.items()], key=lambda x: x[1],
+                ([f"{KNOWN_LABELS[pid].ljust(4)}", func(val)] for pid, val in phoneme_map.items()),
+                key=lambda x: x[1],
             )
             print(len(mean_phoneme_dur))
             for row in zip(
@@ -641,7 +640,7 @@ def show_position_batched(model, dataset, duration_combined_model=None, report_e
             for pid, val in phoneme_map.items():
                 plt.annotate(KNOWN_LABELS[pid], xy=(len(val), func(val)))
             plt.xlabel("Occurence count", fontsize=13)
-            plt.ylabel(f"Mean error" if func is np.mean else "Max error", fontsize=13)
+            plt.ylabel("Mean error" if func is np.mean else "Max error", fontsize=13)
             plt.gca().yaxis.set_major_formatter(FormatStrFormatter("%dms"))
             plt.show()
 
@@ -652,7 +651,12 @@ def show_position_batched(model, dataset, duration_combined_model=None, report_e
 def explore_inherit_border_error(dataset):
     print("""[PLOT] How much do the borders of processed audio transcription differ from the original timesteps?""")
     time_iter = BucketIterator(
-        dataset, batch_size=64, sort_key=lambda x: len(x.features), sort=False, shuffle=True, sort_within_batch=True,
+        dataset,
+        batch_size=64,
+        sort_key=lambda x: len(x.features),
+        sort=False,
+        shuffle=True,
+        sort_within_batch=True,
     )
 
     diffs = []
@@ -665,7 +669,7 @@ def explore_inherit_border_error(dataset):
             mapping = batch.out_map[i]
 
             try:
-                a, b, d = find_borders(original_ids, mapping)
+                _a, _b, d = find_borders(original_ids, mapping)
                 diffs.append(d)
             except Exception as e:
                 print(e)
@@ -691,6 +695,6 @@ def explore_inherit_border_error(dataset):
 
 def draw_counts(counts, name):
     print(f"[dataset rows]{name}: {len(counts)}")
-    f, axarr = plt.subplots(1, 2, figsize=(10, 3))
+    _, axarr = plt.subplots(1, 2, figsize=(10, 3))
     axarr[0].hist(counts, bins=25)
     axarr[1].hist(counts, bins=10)

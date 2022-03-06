@@ -1,12 +1,13 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+import torch.nn.functional as f
 
-from base import ExportImportMixin, ModeSwitcherBase
-from components import Attention, Encoder, PositionalEncoding
+from .base import ExportImportMixin, ModeSwitcherBase
+from .components import Attention, Encoder, PositionalEncoding
 
 
 class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
+
     class Mode(ModeSwitcherBase.Mode):
         weights = "weights"
         position = "position"
@@ -41,7 +42,10 @@ class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
         ).to(device)
 
         self.a_transformer = nn.Sequential(
-            nn.Linear(embedding_audio_size, 32), nn.Sigmoid(), nn.Linear(32, embedding_audio_size), nn.Sigmoid(),
+            nn.Linear(embedding_audio_size, 32),
+            nn.Sigmoid(),
+            nn.Linear(32, embedding_audio_size),
+            nn.Sigmoid(),
         ).to(device)
 
         self.encoder_transcription = Encoder(
@@ -70,7 +74,7 @@ class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
         self.to(device)
 
     def weights_to_positions(self, weights, argmax=False, position_encodings=False):
-        batch, trans_len, seq_len = weights.shape
+        batch, _trans_len, seq_len = weights.shape
 
         if position_encodings:
             position_encoding = self.pos_encode(
@@ -101,24 +105,28 @@ class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
             features_audio = self.a_transformer(features_audio)
 
         encoder_transcription_outputs, _ = self.encoder_transcription(
-            features_transcription, skip_pos_encode=not self.use_pos_encode,
+            features_transcription,
+            skip_pos_encode=not self.use_pos_encode,
         )
         encoder_audio_outputs, _ = self.encoder_audio(features_audio, skip_pos_encode=not self.use_pos_encode)
 
         if not self.use_iter:
             # not progressive batching
             w = self.attn(
-                F.tanh(encoder_transcription_outputs), mask_transcription, F.tanh(encoder_audio_outputs), mask_audio,
+                f.tanh(encoder_transcription_outputs),
+                mask_transcription,
+                f.tanh(encoder_audio_outputs),
+                mask_audio,
             )
 
         else:
-            encoder_transcription_outputs = F.relu(encoder_transcription_outputs)
-            encoder_audio_outputs = F.relu(encoder_audio_outputs)
+            encoder_transcription_outputs = f.relu(encoder_transcription_outputs)
+            encoder_audio_outputs = f.relu(encoder_audio_outputs)
             w = torch.zeros(batch_size, out_seq_len, audio_seq_len).to(self.device)  # tensor to store decoder outputs
 
             w_masks, w_mask, iter_mask_audio = [], None, mask_audio
             for t in range(out_seq_len):
-                iter_input = encoder_transcription_outputs[:, t : (t + 1), :]
+                iter_input = encoder_transcription_outputs[:, t:(t + 1), :]
                 iter_memory = encoder_audio_outputs
 
                 if len(w_masks) > 1:
@@ -139,13 +147,13 @@ class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
                     iter_memory = torch.cat([a, b], dim=2)
                     iter_mask_audio = mask_audio * (w_mask > 0.1) if mask_audio is not None else w_mask > 0.1
 
-                iter_mask_transcription = None if mask_transcription is None else mask_transcription[:, t : (t + 1)]
+                iter_mask_transcription = None if mask_transcription is None else mask_transcription[:, t:(t + 1)]
                 w_slice = self.attn(iter_input, iter_mask_transcription, iter_memory, iter_mask_audio)
 
                 if w_mask is not None:
-                    w[:, t : (t + 1), :] = w_slice * w_mask.unsqueeze(1)
+                    w[:, t:(t + 1), :] = w_slice * w_mask.unsqueeze(1)
                 else:
-                    w[:, t : (t + 1), :] = w_slice
+                    w[:, t:(t + 1), :] = w_slice
 
                 # update the progressive mask
                 w_mask = w_slice.squeeze(1).clone()

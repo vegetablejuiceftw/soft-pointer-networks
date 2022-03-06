@@ -1,8 +1,10 @@
 import random
 
 import torch
-import torch.nn.functional as F
+import torch.nn.functional as f
 from torch import nn
+
+from dataset_loader import UtteranceBatch
 
 
 class MaskedLoss(nn.Module):
@@ -22,6 +24,7 @@ class MaskedLoss(nn.Module):
 
 
 class LabelSmoothingLossAudioOld(nn.Module):
+
     def __init__(self, classes, smoothing=0.0, dim=-1):
         super().__init__()
         self.confidence = 1.0 - smoothing
@@ -107,6 +110,7 @@ class MaskedSoftL1(nn.Module):
 
 
 class LabelSmoothingLossAudio(nn.Module):
+
     def __init__(self, classes, smoothing=0.0, dim=-1):
         super().__init__()
         assert 0.0 <= smoothing <= 1.0
@@ -130,7 +134,7 @@ class LabelSmoothingLossAudio(nn.Module):
         return torch.mean(torch.sum(-true_dist * pred, dim=self.dim))
 
 
-def position_encode_trainer(batch: "UtteranceBatch", model: nn.Module, loss_function: nn.Module):
+def position_encode_trainer(batch: UtteranceBatch, model: nn.Module, loss_function: nn.Module):
     features_audio = batch.features.padded
     masks_audio = batch.features.masks
     features = batch.in_transcription.padded
@@ -142,7 +146,7 @@ def position_encode_trainer(batch: "UtteranceBatch", model: nn.Module, loss_func
     return loss_function(result, target, target_mask)
 
 
-def position_gradient_trainer(batch: "UtteranceBatch", model: nn.Module, loss_function: nn.Module):
+def position_gradient_trainer(batch: UtteranceBatch, model: nn.Module, loss_function: nn.Module):
     features_audio = batch.features.padded
     masks_audio = batch.features.masks
     features = batch.in_transcription.padded
@@ -155,7 +159,7 @@ def position_gradient_trainer(batch: "UtteranceBatch", model: nn.Module, loss_fu
     return loss_function(result, target, target_mask, batch.weight.padded)
 
 
-def audio_detection_trainer(batch: "UtteranceBatch", model: nn.Module, loss_function: nn.Module):
+def audio_detection_trainer(batch: UtteranceBatch, model: nn.Module, loss_function: nn.Module):
     features_audio = batch.features.padded
     masks_audio = batch.features.masks
     features_transcription = batch.in_transcription.padded
@@ -164,7 +168,7 @@ def audio_detection_trainer(batch: "UtteranceBatch", model: nn.Module, loss_func
 
     result = model(features_transcription, masks_transcription, features_audio, masks_audio)
 
-    batch_s, time_s, feat_s = result.shape
+    batch_s, time_s, _feat_s = result.shape
     # "flatten" all logits and targets by putting all subsequences together
     flattened_result = result.contiguous().view(batch_s * time_s, -1)
     flattened_targets = target.contiguous().view(-1)
@@ -173,7 +177,7 @@ def audio_detection_trainer(batch: "UtteranceBatch", model: nn.Module, loss_func
     return loss_function(flattened_result, flattened_targets, flattened_masks)
 
 
-def duration_trainer(batch: "UtteranceBatch", model: nn.Module, loss_function: nn.Module):
+def duration_trainer(batch: UtteranceBatch, model: nn.Module, loss_function: nn.Module):
     features_audio = batch.features.padded
     masks_audio = batch.features.masks
     features = batch.in_transcription.padded
@@ -196,7 +200,7 @@ def train(
     lr_decay=0.9,
     lr=0.001,
     weight_decay=1e-5,
-    repreat=0,
+    repeat=0,
 ):
     optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
     # optimizer = torch.optim.ASGD(model.parameters(), lr=lr, weight_decay=weight_decay)
@@ -222,11 +226,11 @@ def train(
             optimizer.step()
             errors.append((loss.clone().detach().cpu().numpy(), batch))
 
-        if repreat:
+        if repeat:
             errors = list(sorted(errors, key=lambda x: x[0])[-3:])
             print("  ", *[round(s.item(), 3) for s, _ in errors])
-            for i in range(repeat):
-                for s, batch in errors:
+            for _ in range(repeat):
+                for _, batch in errors:
                     model.zero_grad()
                     model.train()
                     optimizer.zero_grad()
@@ -303,14 +307,8 @@ class MaskedThing(nn.Module):
     mse = nn.MSELoss()
 
     def forward(self, pred, target, mask):
-        pred = torch.log1p(F.relu(pred))
-        target = torch.log1p(F.relu(target))
+        pred = torch.log1p(f.relu(pred))
+        target = torch.log1p(f.relu(target))
         pred = torch.mul(pred, mask)
         target = torch.mul(target, mask)
         return self.mse(pred, target)
-
-
-variable_thing_Long_is_1 = 1
-print(
-    variable_thing_Long_is_1, variable_thing_Long_is_1, variable_thing_Long_is_1, variable_thing_Long_is_1,
-)

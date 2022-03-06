@@ -1332,6 +1332,19 @@ python-versions = ">=3.6.2"
 pylint = ">=1.7"
 
 [[package]]
+name = "pyloudnorm"
+version = "0.1.0"
+description = "Implementation of ITU-R BS.1770-4 loudness algorithm in Python"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+future = ">=0.16.0"
+numpy = ">=1.14.2"
+scipy = ">=1.0.1"
+
+[[package]]
 name = "pyparsing"
 version = "3.0.7"
 description = "Python parsing module"
@@ -2107,7 +2120,7 @@ torch = ["torch"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "6803f411baeaa52f4be76fc212d1d46aae1823bf22a2c4fd310d7ab4265d0bc0"
+content-hash = "4a116c2cf7c78c6919b8f190dcb3ac96a95ba7714b92665e616af09a4796caf9"
 
 [metadata.files]
 add-trailing-comma = [
@@ -3063,6 +3076,11 @@ pylint-flask = [
 pylint-plugin-utils = [
     {file = "pylint-plugin-utils-0.7.tar.gz", hash = "sha256:ce48bc0516ae9415dd5c752c940dfe601b18fe0f48aa249f2386adfa95a004dd"},
     {file = "pylint_plugin_utils-0.7-py3-none-any.whl", hash = "sha256:b3d43e85ab74c4f48bb46ae4ce771e39c3a20f8b3d56982ab17aa73b4f98d535"},
+]
+pyloudnorm = [
+    {file = "pyloudnorm-0.1.0-py2-none-any.whl", hash = "sha256:82230b8bcbb3c55bed4e32b245707eaca7eeda188b89b8cac82d1c87a14bd4bb"},
+    {file = "pyloudnorm-0.1.0-py3-none-any.whl", hash = "sha256:d4ebefec5249ff439d684e3fe4c897239e98d8a554a974847d37f1123b90cb81"},
+    {file = "pyloudnorm-0.1.0.tar.gz", hash = "sha256:97c37054cbb0bdc8b52b3e280366a71e0db206e25d0b48d8cfe848d40b376d73"},
 ]
 pyparsing = [
     {file = "pyparsing-3.0.7-py3-none-any.whl", hash = "sha256:a6c06a88f252e6c322f65faf8f418b16213b51bdfaece0524c1c1bc30c63c484"},
