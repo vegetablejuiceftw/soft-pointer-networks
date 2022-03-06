@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as fun
 
-from .components import Decoder, Encoder
+from components import Decoder, Encoder
 
 
 class DurationNetwork(nn.Module):

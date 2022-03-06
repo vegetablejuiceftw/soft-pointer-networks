@@ -11,22 +11,20 @@ from matplotlib.pyplot import figure
 from matplotlib.ticker import FormatStrFormatter
 
 from fastdtw import dtw as slowdtw
-from torchtext.data import BucketIterator
+from torchtext.legacy.data import BucketIterator
 
-from .constants import (
+from dataset_loader import Utterance, dedupe, find_borders
+from models.components import Attention
+from constants import (
     DURATION_SCALER,
     KNOWN_LABELS,
     POS_DIM,
     WIN_STEP,
-    Attention,
-    Utterance,
-    dedupe,
-    find_borders,
     ms_per_step,
-    test_dataset,
-    transcription_with_duration,
 )
 
+# test_dataset
+# transcription_with_duration
 
 @contextlib.contextmanager
 def nullcontext():
@@ -457,10 +455,10 @@ def show_position(
                                 duration_combined_model(transcription.unsqueeze(0), None, audio.unsqueeze(0), None)
                                 * DURATION_SCALER
                             )
-                            .view(-1)
-                            .detach()
-                            .cpu()
-                            .numpy()[:-1]
+                                .view(-1)
+                                .detach()
+                                .cpu()
+                                .numpy()[:-1]
                         )
                     v = prev + duration[i - 1]
                     switched = True
@@ -563,9 +561,9 @@ def show_position_batched(model, dataset, duration_combined_model=None, report_e
                     duration_combined_model(features_transcription, masks_transcription, features_audio, masks_audio)
                     * DURATION_SCALER
                 )
-                .detach()
-                .cpu()
-                .numpy()
+                    .detach()
+                    .cpu()
+                    .numpy()
             )
 
         for i in range(batch_s):

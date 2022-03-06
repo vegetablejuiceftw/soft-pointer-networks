@@ -1,6 +1,6 @@
 import torch.nn as nn
 
-from .components import Decoder, Encoder, LightLSTM, PositionalEncoding
+from components import Decoder, Encoder, LightLSTM, PositionalEncoding
 
 
 class MultiContextAttentionAudio(nn.Module):

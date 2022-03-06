@@ -6,7 +6,6 @@ from os.path import join
 from random import Random
 from typing import List, NamedTuple
 
-import IPython.display as ipd
 import numpy as np
 import torch
 import torch.nn as nn
@@ -16,9 +15,9 @@ import pandas as pd
 import pyrubberband as pyrb
 import soundfile as sf
 from python_speech_features import logfbank, mfcc
-from torchtext.data import BucketIterator, RawField
+from torchtext.legacy.data import BucketIterator, RawField
 
-from .constants import (
+from constants import (
     DURATION_SCALER,
     FOUND_LABELS,
     INPUT_SIZE,
@@ -32,9 +31,9 @@ from .constants import (
     WIN_SIZE,
     WIN_STEP,
     ms_per_step,
-    pyln,
 )
 
+# pyln
 
 class AudioCaching:
     BASE_FOLDER = "/content/TIMIT-PLUS"
@@ -171,7 +170,7 @@ class DirectMaskDataset(Dataset):
         if not sa:
             df = df.loc[SA_mask]
 
-        ipd.display(df.head())
+        print(df.head())
         nRow, nCol = df.shape
         # print(f'There are {nRow} rows and {nCol} columns')
         A, B = (
