@@ -16,7 +16,6 @@ import torch.nn as nn
 from python_speech_features import logfbank, mfcc
 from torch.utils.data import Dataset
 from torchtext.legacy.data import BucketIterator, RawField
-import torch.nn.functional as f
 
 from spn.constants import (
     DURATION_SCALER,
@@ -121,12 +120,6 @@ def find_borders(output_ids, original_mapping):
     return a, b, diff
 
 
-class Upsample(nn.Upsample):
-    def forward(self, input: torch.Tensor) -> torch.Tensor:
-        return f.interpolate(
-            input, self.size, self.scale_factor, self.mode, self.align_corners, recompute_scale_factor=True)
-
-
 class PositionalEncodingLabeler(nn.Module):
 
     def __init__(self, d_model, dropout=0.1, scale=1, max_len=2048):
@@ -180,7 +173,7 @@ class DirectMaskDataset(Dataset):
 
         # nRow, nCol = df.shape
         # print(f'There are {nRow} rows and {nCol} columns')
-        a = df.loc[phn_mask == True].path_from_data_dir
+        a = df.loc[phn_mask].path_from_data_dir
         b = df.loc[audio_mask].path_from_data_dir
         assert len(a) == len(b)
         return list(zip(a, b))

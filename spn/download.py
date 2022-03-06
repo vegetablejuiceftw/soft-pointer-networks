@@ -1,6 +1,8 @@
+import os.path
+
 import gdown
 from pkg_resources import ensure_directory
-import os.path
+
 
 BASE = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 
