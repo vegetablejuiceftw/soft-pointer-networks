@@ -168,12 +168,12 @@ class DirectMaskDataset(Dataset):
         if not sa:
             df = df.loc[sa_mask]
 
-        with pd.option_context('display.max_columns', None, 'display.max_colwidth', None):
-            print(df)
+        # with pd.option_context('display.max_columns', None, 'display.max_colwidth', None):
+        #     print(df)
 
         # nRow, nCol = df.shape
         # print(f'There are {nRow} rows and {nCol} columns')
-        a = df.loc[phn_mask].path_from_data_dir
+        a = df.loc[phn_mask.fillna(False)].path_from_data_dir
         b = df.loc[audio_mask].path_from_data_dir
         assert len(a) == len(b)
         return list(zip(a, b))
@@ -445,6 +445,7 @@ class DirectMaskDataset(Dataset):
                     f"[ERROR] len not match {length} != {len(tag_vecs)} != {len(tag_ints)} \n\t - {label_file}\n\t - {audio_file}",
                 )
 
+        self.ms_per_step = ms_per_step
         self.inp = stack(inp, torch.FloatTensor)
         self.inp_mfcc = stack(inp_mfcc, torch.FloatTensor)
 
@@ -502,7 +503,8 @@ class DirectMaskDataset(Dataset):
             "out_duration": OUT_DUR,
             "in_transcription": IN_TRANS,
             "index": INDEX,
-            "key": KEY,
+            "audio_file": KEY,
+            "label_file": KEY,
             "position": POSITION,
             "border": BORDER,
             "weight": WEIGHT,

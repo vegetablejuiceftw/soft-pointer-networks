@@ -69,6 +69,7 @@ class ExportImportMixin:
         model_dict.update(pretrained_dict)
         # 3. load the new state dict
         self.load_state_dict(model_dict)
+        return self
 
     def export_model(self: torch.nn.Module, path):
         torch.save(self.state_dict(), path)

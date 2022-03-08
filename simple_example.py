@@ -7,14 +7,17 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(device)
 
 limit = 128  # None means unlimited, else 100 would mean to load only the first 100 files
-limit = None
+# limit = None
 
 DirectMaskDataset.base = ".data"
 test_files = DirectMaskDataset.load_csv('test', sa=False)  # do not import calibration sentences
+# test_files = [(a, b) for a, b in test_files if 'TEST/DR1/FELC0/SX126' in a]
+# test_files = [(a, b) for a, b in test_files if 'TEST/DR1/MREB0/SI2005' in a]
+
 test_dataset = DirectMaskDataset(test_files, limit=limit, device=device)
 
 soft_pointer_model = SoftPointerNetwork(54, 26, 256, device=device)
 
 soft_pointer_model.load(path="spn/trained_weights/position_model-final.pth")
 
-show_position_batched(soft_pointer_model.with_gradient, test_dataset, duration_combined_model=None, plotting=True)
+show_position_batched(soft_pointer_model.with_gradient, test_dataset, duration_combined_model=None, plotting=False)

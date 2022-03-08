@@ -529,6 +529,14 @@ def location_fix(positions, truth, durations, end_of_audio):
     return positions, difos
 
 
+def plot(audio, transcript):
+    import matplotlib.pyplot as plt
+    from matplotlib import cm
+    f, axarr = plt.subplots(2, figsize=(8, 8))
+    axarr[0].imshow(audio.T, origin="lower", aspect="auto", cmap=cm.winter)
+    axarr[1].imshow(transcript.T, origin="lower", aspect="auto", cmap=cm.winter)
+    plt.show()
+
 def show_position_batched(
     model, dataset, duration_combined_model=None, report_error=750, plotting=False
 ):  # noqa: MC0001
@@ -540,12 +548,18 @@ def show_position_batched(
     label_ids = []
 
     for batch in dataset.batch(32):
+        batch: Utterance
         features_audio = batch.features.padded
         masks_audio = batch.features.masks
 
         features_transcription = batch.in_transcription.padded
         masks_transcription = batch.in_transcription.masks
 
+        # print(batch.label_file, batch.audio_file)
+        # print("features_transcription", batch.in_transcription.padded.shape, batch.in_transcription.masks.sum())
+        # print("features_audio", batch.features.padded.shape, batch.features.masks.sum())
+        # plot(batch.features.padded.cpu().detach().numpy(), batch.in_transcription.padded.cpu().detach().numpy())
+        # torch.save(batch.in_transcription.padded[0], "vanilla_transcription.pth")
         borders = batch.border.padded.cpu().detach().numpy()
         border_lengths = batch.border.lengths.cpu().detach().numpy()
 
@@ -598,6 +612,8 @@ def show_position_batched(
                 prev = v
 
             diff = truth_border * ms_per_step - b
+            # print("truth", (truth_border * ms_per_step).round().tolist())
+            # print("gen  ", b.round().tolist())
             if np.abs(diff).max() > report_error:
                 print(f"[id:{idx:3d}]  [{diff.min():5.0f} {diff.max():5.0f}]  {length:4d} {switched}")
 
@@ -641,7 +657,8 @@ def show_position_batched(
             plt.gca().yaxis.set_major_formatter(FormatStrFormatter("%dms"))
             plt.show()
 
-    print("TOTAL", np.abs(diff).sum())
+    print("TOTAL", np.abs(diff).sum(), diff.shape)
+    torch.save(diff, "diff.pth")
     display_diff(diff, "position", plotting=plotting)
 
 
