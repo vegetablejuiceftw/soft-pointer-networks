@@ -1,161 +1,17 @@
-from typing import List, Optional, NamedTuple
-import os
+from typing import List, Dict
 
 import torch
 from torch.utils.data import Dataset, DataLoader
 
+from load import load_csv, load_files, File, UtteranceBatch
 from spn.dto.base import DataTransferObject
 from spn.models.soft_pointer_network import SoftPointerNetwork
 from spn.tools import display_diff
 import numpy as np
-import pandas as pd
 
-import pyloudnorm as pyln
-import soundfile as sf
-from python_speech_features import logfbank
-from spn.constants import (
-    MAP_LABELS,
-    MERGE_DOUBLES,
-    NO_BORDER_MAPPING,
-    TRANSFORM_MAPPING, WIN_SIZE, WIN_STEP, INPUT_SIZE,
-)
 
 from tqdm.auto import tqdm
 import torch.nn as nn
-
-
-class UtteranceBatch(NamedTuple):
-    padded: torch.tensor
-    masks: torch.tensor
-    lengths: torch.tensor
-
-
-class ArrayMeta(type):
-    def __getitem__(self, t):
-        return type('Array', (Array,), {'__dtype__': t})
-
-
-class Array(np.ndarray, metaclass=ArrayMeta):
-    # TODO: maybe better solution for py3.9 https://github.com/samuelcolvin/pydantic/issues/380#issuecomment-736135687
-    @classmethod
-    def __get_validators__(cls):
-        yield cls.validate_type
-
-    @classmethod
-    def validate_type(cls, val):
-        return val
-
-
-class File(DataTransferObject):
-    source: tuple
-    config: tuple
-    features_spectogram: Array[float]
-    features_phonemes: Array[float]
-    target_timestamps: Array[float]
-    output_timestamps: Optional[Array[float]] = None
-
-
-def load_csv(file_path, sa=False):
-    """Filters out the files names of phonetic and sound data in pairs."""
-    df = pd.read_csv(file_path, delimiter=",", nrows=None)
-    df = df.sort_values(by=["path_from_data_dir"])
-    audio_mask = df.is_audio & df.is_converted_audio
-    phn_mask = df.filename.str.contains(".PHN")
-    sa_mask = df.filename.str.contains("SA") == False  # noqa # pylint: disable=singleton-comparison
-    df = df.loc[audio_mask | phn_mask]
-    if not sa:
-        df = df.loc[sa_mask]
-    a = df.loc[phn_mask.fillna(False)].path_from_data_dir
-    b = df.loc[audio_mask].path_from_data_dir
-    assert len(a) == len(b)
-    return list(zip(a, b))
-
-
-def process_audio(label_file: str, ms_per_step: float):
-    with open(label_file) as f:
-        lines = list(f.readlines())
-        labels = []
-        sample_rate = 16000
-        for line in lines:
-            _, end, tag = line.split()
-            end_sec = float(end) / sample_rate
-            labels.append((end_sec * 1000, tag))
-
-    tag_mapping = []
-
-    current, prev = 0, None
-
-    for end_ms, tag in labels:
-        tag = TRANSFORM_MAPPING.get(tag, tag)
-        q_tag = False  # /q/ tag
-        if tag is None:
-            tag = prev
-            q_tag = True
-            end_ms = (current + end_ms) / 2  # TODO: quiet should be included in the current?
-
-        if current >= end_ms:
-            continue
-
-        unholy_combination = prev in NO_BORDER_MAPPING and tag in NO_BORDER_MAPPING
-        if prev == tag and MERGE_DOUBLES or unholy_combination or q_tag:
-            tag_id, _ems = tag_mapping[-1]
-            tag_mapping[-1] = (tag_id, end_ms)
-
-        else:
-            tag_mapping.append((tag, end_ms))
-
-        prev = tag  # handle same tag occurrence
-        current = int(end_ms // ms_per_step + 1) * ms_per_step
-
-    transcript = [
-        np.array(MAP_LABELS[tag][0])
-        for tag, end_ms in tag_mapping
-    ]
-    borders = [end_ms for tag, end_ms in tag_mapping]
-    return borders, transcript
-
-
-def load_files(base, files, winlen=WIN_SIZE, winstep=WIN_STEP, nfilt=INPUT_SIZE):
-    rate = 16000
-    meter = pyln.Meter(rate)  # create BS.1770 meter
-    ms_per_step = winstep * 1000
-
-    output = []
-    for i, source in enumerate(tqdm(files)):
-        label_file, audio_file = source
-        label_file = os.path.join(base, "data", label_file)
-        audio_file = os.path.join(base, "data", audio_file)
-
-        borders, transcription = process_audio(label_file, ms_per_step)
-
-        audio, read_rate = sf.read(audio_file)
-        assert read_rate == rate, f"{read_rate} != {rate}"
-
-        # loudness = meter.integrated_loudness(audio)
-        # audio = pyln.normalize.loudness(audio, loudness, -40.0)
-
-        fbank_feat = logfbank(
-            audio,
-            rate,
-            winlen=winlen,
-            winstep=winstep,
-            nfilt=nfilt,
-        )  # TODO: remove scaling
-
-        # some audio instances are too short for the audio transcription
-        # and the winlen cut :(
-        # fbank_feat = np.vstack([fbank_feat] + [fbank_feat[-1]] * 10)
-        # fbank_feat = fbank_feat[:int(borders[-1] // ms_per_step)]
-
-        output.append(File(
-            source=source,
-            config=(winlen, winstep),
-            features_spectogram=torch.FloatTensor(fbank_feat),
-            features_phonemes=torch.FloatTensor(transcription),
-            target_timestamps=torch.FloatTensor(borders),
-        ))
-
-    return output
 
 
 def fix_borders(
@@ -179,10 +35,11 @@ def fix_borders(
         item = item.update(output_timestamps=borders)
         output.append(item)
 
-        prev = 0
-        for i, v in enumerate(borders):
-            assert v >= prev, f"This should never happen! {i}"
-            prev = v
+        # TODO: enable?
+        # prev = 0
+        # for i, v in enumerate(borders):
+        #     assert v >= prev, f"This should never happen! {i}"
+        #     prev = v
 
         diff = item.target_timestamps - item.output_timestamps
         if np.abs(diff).max() > report_error:
@@ -191,36 +48,15 @@ def fix_borders(
     return output
 
 
-def plot(audio, transcript):
-    import matplotlib.pyplot as plt
-    from matplotlib import cm
-    f, axarr = plt.subplots(2, figsize=(8, 8))
-    axarr[0].imshow(audio.T, origin="lower", aspect="auto", cmap=cm.winter)
-    # axarr[1].imshow(torch.load("vanilla_audio.pth").cpu().T, origin="lower", aspect="auto", cmap=cm.winter)
-    # axarr[1].imshow(torch.load("vanilla_transcription.pth").cpu().T, origin="lower", aspect="auto", cmap=cm.winter)
-    axarr[1].imshow(transcript.T, origin="lower", aspect="auto", cmap=cm.winter)
-
-    # print((torch.load("vanilla_audio.pth").cpu().T - audio.T).sum(), "FUMMM")
-    plt.title('NEW IMPROVED')
-    plt.show()
-
-
 def generate_borders(
     model, dataset, batch_size: int = 32
 ):
     model.eval()
-
-    winlen, winstep = dataset.files[0].config
-    ms_per_step = winstep * 1000
     output = []
     for batch in tqdm(dataset.batch(batch_size)):
         features_audio = batch['features_spectogram']
         features_transcription = batch['features_phonemes']
 
-        # print(batch['source'])
-        # print("features_transcription", features_transcription.padded.shape, features_transcription.masks.sum())
-        # print("features_audio", features_audio.padded.shape, features_audio.masks.sum())
-        # plot(features_audio.padded[0], features_transcription.padded[0])
         borders_predicted = model(
             features_transcription.padded.to(model.device),
             features_transcription.masks.to(model.device),
@@ -232,7 +68,7 @@ def generate_borders(
             item: File
             length = batch['target_timestamps'].lengths[i]
             predicted_border = borders_predicted[i, :length]
-            output.append(item.update(output_timestamps=predicted_border * ms_per_step))
+            output.append(item.update(output_timestamps=predicted_border))
 
     return output
 
@@ -240,12 +76,10 @@ def generate_borders(
 def report_borders(
     generated: List[File], plotting=False
 ):
-    # item = generated[0]
-    # print("truth", item.target_timestamps.round().tolist())
-    # print("gen  ", item.output_timestamps.round().tolist())
+    winlen, winstep = generated[0].config
+    ms_per_step = winstep * 1000
     diffs = [item.target_timestamps[:-1] - item.output_timestamps[:-1] for item in generated]
-    diff = np.concatenate(diffs)
-    # print((torch.load("diff.pth") - diff).sum(), "FUMMM")
+    diff = np.concatenate(diffs) * ms_per_step
 
     print("TOTAL", np.abs(diff).sum(), diff.shape)
     display_diff(diff, "position", plotting=plotting)
@@ -253,8 +87,8 @@ def report_borders(
 
 
 class MyCustomDataset(Dataset):
-    def __init__(self, files):
-        self.files = files
+    def __init__(self, files: List[File]):
+        self.files = sorted(files, key=lambda x: len(x.features_spectogram))
 
     def __getitem__(self, index):
         return self.files[index]
@@ -275,6 +109,7 @@ class MyCustomDataset(Dataset):
         )
 
     def collate_fn(self, batch: List[DataTransferObject]):
+        batch = sorted(batch, key=lambda x: -len(x.features_spectogram))
         result = {'original': batch}
         first = batch[0]
         for k in first.__fields__.keys():
@@ -286,25 +121,118 @@ class MyCustomDataset(Dataset):
         return DataLoader(dataset=self, batch_size=batch_size, shuffle=False, collate_fn=self.collate_fn)
 
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(device)
+def train(
+    model,
+    num_epochs,
+    data_iter,
+    loss_function,
+    train_function,
+    eval_iter=None,
+    lr_decay=0.9,
+    lr=0.001,
+    weight_decay=1e-5,
+):
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+    # optimizer = torch.optim.ASGD(model.parameters(), lr=lr, weight_decay=weight_decay)
+    print(optimizer)
 
-limit = 128  # None means unlimited, else 100 would mean to load only the first 100 files
-# limit = None
+    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=lr_decay)
+    eval_iter = eval_iter or data_iter
+    eval_iter = [eval_iter] if not isinstance(eval_iter, list) else eval_iter
 
-base = ".data"
-file_path = f"{base}/test_data.csv"
-test_files = load_csv(file_path, sa=False)[:limit]
-# test_files = [(a, b) for a, b in test_files if 'TEST/DR1/FELC0/SX126' in a]
-# test_files = [(a, b) for a, b in test_files if 'TEST/DR1/MREB0/SI2005' in a]
-test_files = load_files(base, test_files)
-print(len(test_files))
+    for epoch in range(1, num_epochs + 1):
+        for e_iter in eval_iter:
+            evaluate(model, e_iter, train_function, loss_function)
 
-test_dataset = MyCustomDataset(test_files)
+        print("Starting epoch %d, learning rate is %f" % (epoch, lr_scheduler.get_lr()[0]))
+        errors = []
+        for batch in tqdm(data_iter):
+            model.zero_grad()
+            model.train()
+            optimizer.zero_grad()
+            loss = train_function(batch, model, loss_function)
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 3)
+            optimizer.step()
+            errors.append((loss.clone().detach().cpu().numpy(), batch))
 
-soft_pointer_model = SoftPointerNetwork(54, 26, 256, device=device)
-soft_pointer_model.load(path="spn/trained_weights/position_model-final.pth")
+        lr_scheduler.step()
 
-generated = generate_borders(soft_pointer_model.with_gradient, test_dataset)
-generated = fix_borders(generated)
-report_borders(generated, plotting=False)
+    for e_iter in eval_iter:
+        evaluate(model, e_iter, train_function, loss_function)
+
+
+def evaluate(model, data_iter, train_function, loss_function):
+    model.eval()
+    total_loss = 0
+    size = 0
+    with torch.no_grad():
+        for batch in data_iter:
+            total_loss += abs(train_function(batch, model, loss_function).item())
+            size += 1
+    print(
+        f"  Evaluation[{getattr(data_iter, 'prefix', '')}] - avg_loss: {total_loss / size:.7f} count:{size} Total loss:{total_loss:.7f}",
+    )
+
+
+def position_gradient_trainer(batch: Dict[str, UtteranceBatch], model: nn.Module, loss_function: nn.Module):
+    features_audio = batch['features_spectogram']
+    features_transcription = batch['features_phonemes']
+    target = batch['target_timestamps']
+
+    result = model(
+        features_transcription.padded.to(model.device),
+        features_transcription.masks.to(model.device),
+        features_audio.padded.to(model.device),
+        features_audio.masks.to(model.device),
+    )
+    return loss_function(result, target.padded.to(model.device), target.masks.to(model.device))
+
+
+class MaskedMSE(nn.Module):
+    mse = nn.MSELoss()
+
+    def forward(self, pred, target, mask, *_):
+        pred = torch.mul(pred, mask)
+        target = torch.mul(target, mask)
+        return self.mse(pred, target)
+
+
+if __name__ == '__main__':
+    import warnings
+    warnings.filterwarnings("ignore")
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    limit = None
+
+    base = ".data"
+    file_path = f"{base}/test_data.csv"
+    test_files = load_csv(file_path, sa=False)[:limit]
+    test_files = load_files(base, test_files)
+    test_dataset = MyCustomDataset(test_files)
+
+    soft_pointer_model = SoftPointerNetwork(54, 26, 256, device=device, dropout=0.2)
+    soft_pointer_model.load(path="spn/trained_weights/position_model-final.pth")
+
+    generated = generate_borders(soft_pointer_model.with_gradient, test_dataset)
+    generated = fix_borders(generated, report_error=550)
+    report_borders(generated, plotting=False)
+
+    torch.cuda.empty_cache()
+    # SHOULD BE Evaluation[] - avg_loss: 1.7691183 count:21 Total loss:37.1514837
+    # lr = 0.0000970
+    # lr = 0.00000970
+    lr = 0.0000000970
+    train(
+        soft_pointer_model.with_gradient,
+        int(3),
+        test_dataset.batch(32),
+        MaskedMSE(),
+        eval_iter=[test_dataset.batch(64)],
+        train_function=position_gradient_trainer,
+        lr_decay=0.98, lr=lr, weight_decay=1e-05)
+
+    generated = generate_borders(soft_pointer_model.with_gradient, test_dataset)
+    generated = fix_borders(generated, report_error=550)
+    report_borders(generated, plotting=False)
