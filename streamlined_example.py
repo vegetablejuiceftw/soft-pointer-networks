@@ -78,6 +78,7 @@ def report_borders(
 ):
     winlen, winstep = generated[0].config
     ms_per_step = winstep * 1000
+    # reject last border which is EOF
     diffs = [item.target_timestamps[:-1] - item.output_timestamps[:-1] for item in generated]
     diff = np.concatenate(diffs) * ms_per_step
 
@@ -186,7 +187,12 @@ def position_gradient_trainer(batch: Dict[str, UtteranceBatch], model: nn.Module
         features_audio.padded.to(model.device),
         features_audio.masks.to(model.device),
     )
-    return loss_function(result, target.padded.to(model.device), target.masks.to(model.device))
+    # reject last border which is EOF
+    masks = target.masks
+    # masks.sum() + batch_size should be the original count
+    masks[:, :-1] *= masks[:, 1:]
+    masks[:, -1] = False
+    return loss_function(result, target.padded.to(model.device), masks.to(model.device))
 
 
 class MaskedMSE(nn.Module):
@@ -205,6 +211,7 @@ if __name__ == '__main__':
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     limit = None
+    # limit = 16
 
     base = ".data"
     file_path = f"{base}/test_data.csv"

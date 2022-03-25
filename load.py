@@ -116,7 +116,7 @@ def process_audio(label_file: str, ms_per_step: float):
 
 def load_files(base, files, winlen=WIN_SIZE, winstep=WIN_STEP, nfilt=INPUT_SIZE):
     rate = 16000
-    meter = pyln.Meter(rate)  # create BS.1770 meter
+    # meter = pyln.Meter(rate)  # create BS.1770 meter
     ms_per_step = winstep * 1000
 
     output = []
@@ -150,8 +150,8 @@ def load_files(base, files, winlen=WIN_SIZE, winstep=WIN_STEP, nfilt=INPUT_SIZE)
             source=source,
             config=(winlen, winstep),
             features_spectogram=torch.FloatTensor(fbank_feat),
-            features_phonemes=torch.FloatTensor(transcription), #[:-1],
-            target_timestamps=torch.FloatTensor(borders)[:-1] / ms_per_step,
+            features_phonemes=torch.FloatTensor(transcription),
+            target_timestamps=torch.FloatTensor(borders) / ms_per_step,
         ))
 
     return output

@@ -81,12 +81,12 @@ class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
                 torch.zeros(batch, seq_len, self.position_encoding_size).to(self.device),
             )
             positions = torch.bmm(weights, position_encoding)
-            return positions[:, :-1]
+            return positions[:, :]
 
         if argmax:
             return weights.max(2)[1][:, :]
 
-        positions = (self.gradient[:seq_len] * weights.transpose(1, 2)).sum(1)[:, :-1]
+        positions = (self.gradient[:seq_len] * weights.transpose(1, 2)).sum(1)[:, :]
         return positions
 
     def forward(self, features_transcription, mask_transcription, features_audio, mask_audio):
