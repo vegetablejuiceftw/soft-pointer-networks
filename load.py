@@ -10,12 +10,11 @@ import numpy as np
 
 from tqdm.auto import tqdm
 
-import pyloudnorm as pyln
+# import pyloudnorm as pyln
 import soundfile as sf
 from python_speech_features import logfbank
 from spn.constants import (
     MAP_LABELS,
-    MERGE_DOUBLES,
     NO_BORDER_MAPPING,
     TRANSFORM_MAPPING, WIN_SIZE, WIN_STEP, INPUT_SIZE,
 )
@@ -78,9 +77,7 @@ def process_audio(label_file: str, ms_per_step: float):
             labels.append((end_sec * 1000, tag))
 
     tag_mapping = []
-
     current, prev = 0, None
-
     for end_ms, tag in labels:
         tag = TRANSFORM_MAPPING.get(tag, tag)
         q_tag = False  # /q/ tag
@@ -88,23 +85,17 @@ def process_audio(label_file: str, ms_per_step: float):
             tag = prev
             q_tag = True
             end_ms = (current + end_ms) / 2  # TODO: quiet should be included in the current?
-
-        if current >= end_ms:
-            continue
+            # end_ms = max(current, end_ms)
 
         unholy_combination = prev in NO_BORDER_MAPPING and tag in NO_BORDER_MAPPING
-        if prev == tag and MERGE_DOUBLES or unholy_combination or q_tag:
+        if prev == tag or unholy_combination or q_tag:
             tag_id, _ems = tag_mapping[-1]
             tag_mapping[-1] = (tag_id, end_ms)
-
         else:
             tag_mapping.append((tag, end_ms))
 
         prev = tag  # handle same tag occurrence
-        # current = int(end_ms // ms_per_step + 1) * ms_per_step
-        current += ms_per_step
-        while current < end_ms:
-            current += ms_per_step
+        current = int(end_ms // ms_per_step + 1) * ms_per_step
 
     transcript = [
         np.array(MAP_LABELS[tag][0])
