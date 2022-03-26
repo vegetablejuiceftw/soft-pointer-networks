@@ -4,9 +4,8 @@ import os
 import pandas as pd
 import torch
 
-from spn.dto.base import DataTransferObject
 import numpy as np
-
+from pydantic import BaseModel
 
 from tqdm.auto import tqdm
 
@@ -41,13 +40,16 @@ class Array(np.ndarray, metaclass=ArrayMeta):
         return val
 
 
-class File(DataTransferObject):
+class File(BaseModel):
     source: tuple
     config: tuple
     features_spectogram: Array[float]
     features_phonemes: Array[float]
     target_timestamps: Array[float]
     output_timestamps: Optional[Array[float]] = None
+
+    def update(self, **kwargs):
+        return self.copy(update=kwargs)
 
 
 def load_csv(file_path, sa=False):

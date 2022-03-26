@@ -36,6 +36,7 @@ pydantic = "^1.9.0"
 orjson = "^3.6.7"
 tqdm = "^4.63.0"
 jupyter = "^1.0.0"
+pytorch-lightning = "^1.5.10"
 
 [tool.poetry.dev-dependencies]
 pytest = "==6.*"

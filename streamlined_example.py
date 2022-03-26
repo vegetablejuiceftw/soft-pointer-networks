@@ -4,7 +4,6 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 
 from load import load_csv, load_files, File, UtteranceBatch
-from spn.dto.base import DataTransferObject
 from spn.models.soft_pointer_network import SoftPointerNetwork
 from spn.tools import display_diff
 import numpy as np
@@ -89,7 +88,7 @@ def report_borders(
 
 class MyCustomDataset(Dataset):
     def __init__(self, files: List[File]):
-        self.files = sorted(files, key=lambda x: len(x.features_spectogram))
+        self.files = files
 
     def __getitem__(self, index):
         return self.files[index]
@@ -109,7 +108,7 @@ class MyCustomDataset(Dataset):
             lens,
         )
 
-    def collate_fn(self, batch: List[DataTransferObject]):
+    def collate_fn(self, batch: List[File]):
         batch = sorted(batch, key=lambda x: -len(x.features_spectogram))
         result = {'original': batch}
         first = batch[0]
@@ -119,7 +118,7 @@ class MyCustomDataset(Dataset):
         return result
 
     def batch(self, batch_size):
-        return DataLoader(dataset=self, batch_size=batch_size, shuffle=False, collate_fn=self.collate_fn)
+        return DataLoader(dataset=self, batch_size=batch_size, shuffle=True, collate_fn=self.collate_fn)
 
 
 def train(
@@ -133,19 +132,22 @@ def train(
     lr=0.001,
     weight_decay=1e-5,
 ):
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+    # optimizer.
     # optimizer = torch.optim.ASGD(model.parameters(), lr=lr, weight_decay=weight_decay)
     print(optimizer)
 
-    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=lr_decay)
+    # lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=lr_decay)
+    lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
     eval_iter = eval_iter or data_iter
     eval_iter = [eval_iter] if not isinstance(eval_iter, list) else eval_iter
 
     for epoch in range(1, num_epochs + 1):
         for e_iter in eval_iter:
-            evaluate(model, e_iter, train_function, loss_function)
+            eval_loss = evaluate(model, e_iter, train_function, loss_function)
+        lr_scheduler.step(eval_loss)
 
-        print("Starting epoch %d, learning rate is %f" % (epoch, lr_scheduler.get_lr()[0]))
+        # print("Starting epoch %d, learning rate is %f" % (epoch, lr_scheduler.get_lr()[0]))
         errors = []
         for batch in tqdm(data_iter):
             model.zero_grad()
@@ -156,8 +158,6 @@ def train(
             torch.nn.utils.clip_grad_norm_(model.parameters(), 3)
             optimizer.step()
             errors.append((loss.clone().detach().cpu().numpy(), batch))
-
-        lr_scheduler.step()
 
     for e_iter in eval_iter:
         evaluate(model, e_iter, train_function, loss_function)
@@ -174,6 +174,7 @@ def evaluate(model, data_iter, train_function, loss_function):
     print(
         f"  Evaluation[{getattr(data_iter, 'prefix', '')}] - avg_loss: {total_loss / size:.7f} count:{size} Total loss:{total_loss:.7f}",
     )
+    return total_loss / size
 
 
 def position_gradient_trainer(batch: Dict[str, UtteranceBatch], model: nn.Module, loss_function: nn.Module):
@@ -219,24 +220,25 @@ if __name__ == '__main__':
     test_files = load_files(base, test_files)
     test_dataset = MyCustomDataset(test_files)
 
-    soft_pointer_model = SoftPointerNetwork(54, 26, 256, device=device, dropout=0.2)
+    soft_pointer_model = SoftPointerNetwork(54, 26, 256, device=device, dropout=0.05)
     soft_pointer_model.load(path="spn/trained_weights/position_model-final.pth")
 
-    generated = generate_borders(soft_pointer_model.with_gradient, test_dataset)
+    generated = generate_borders(soft_pointer_model.with_gradient, test_dataset, batch_size=128)
     generated = fix_borders(generated, report_error=550)
     report_borders(generated, plotting=False)
 
     torch.cuda.empty_cache()
     # SHOULD BE Evaluation[] - avg_loss: 1.7691183 count:21 Total loss:37.1514837
-    # lr = 0.0000970
+    lr = 0.0000970
     # lr = 0.00000970
-    lr = 0.0000000970
+    # lr = 0.0000000970
+    # for lr in [0.000970 / 4, 0.0000970, 0.00000970, 0.0000000970]:
     train(
         soft_pointer_model.with_gradient,
-        int(3),
-        test_dataset.batch(32),
+        int(25),
+        test_dataset.batch(64),
         MaskedMSE(),
-        eval_iter=[test_dataset.batch(64)],
+        eval_iter=[test_dataset.batch(128)],
         train_function=position_gradient_trainer,
         lr_decay=0.98, lr=lr, weight_decay=1e-05)
 

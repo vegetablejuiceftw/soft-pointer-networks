@@ -30,7 +30,7 @@ class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
         self.mode = self.Mode.gradient
         self.position_encoding_size = position_encoding_size
         self.device = device
-        self.use_iter = True
+        self.use_iter = False
         self.use_pos_encode = True
         self.use_pre_transformer = True
 
@@ -111,11 +111,13 @@ class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
         encoder_audio_outputs, _ = self.encoder_audio(features_audio, skip_pos_encode=not self.use_pos_encode)
 
         if not self.use_iter:
+            encoder_transcription_outputs = f.relu(encoder_transcription_outputs)
+            encoder_audio_outputs = f.relu(encoder_audio_outputs)
             # not progressive batching
             w = self.attn(
-                f.tanh(encoder_transcription_outputs),
+                encoder_transcription_outputs,
                 mask_transcription,
-                f.tanh(encoder_audio_outputs),
+                encoder_audio_outputs,
                 mask_audio,
             )
 
