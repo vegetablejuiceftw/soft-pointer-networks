@@ -5,6 +5,7 @@ cache
 html
 /html-*/
 /AWS/scratch.yml
+/lightning_logs
 
 source
 data

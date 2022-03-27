@@ -1,3 +1,4 @@
+from datetime import timedelta
 from typing import List, Dict
 
 import torch
@@ -5,9 +6,8 @@ from torch.utils.data import Dataset, DataLoader
 
 from load import load_csv, load_files, File, UtteranceBatch
 from spn.models.soft_pointer_network import SoftPointerNetwork
-from spn.tools import display_diff
 import numpy as np
-
+import matplotlib.pyplot as plt
 
 from tqdm.auto import tqdm
 import torch.nn as nn
@@ -53,15 +53,7 @@ def generate_borders(
     model.eval()
     output = []
     for batch in tqdm(dataset.batch(batch_size)):
-        features_audio = batch['features_spectogram']
-        features_transcription = batch['features_phonemes']
-
-        borders_predicted = model(
-            features_transcription.padded.to(model.device),
-            features_transcription.masks.to(model.device),
-            features_audio.padded.to(model.device),
-            features_audio.masks.to(model.device),
-        ).cpu().detach().numpy()
+        borders_predicted = model(batch).cpu().detach().numpy()
 
         for i, item in enumerate(batch['original']):
             item: File
@@ -70,6 +62,40 @@ def generate_borders(
             output.append(item.update(output_timestamps=predicted_border))
 
     return output
+
+
+def display_diff(errors, name="", unit="ms", plotting=False):
+    errors = errors.copy()
+    hist, bins = np.histogram(
+        abs(errors),
+        bins=[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 9999],
+    )
+    hist = np.round(hist / len(errors) * 100, 2)
+    hist = np.cumsum(hist)
+
+    print(
+        f"[{name}] DIFF abs mean: {abs(errors).mean():.2f}{unit} "
+        f"({errors.mean():.2f}) min:{abs(errors).min():.2f}{unit} "
+        f"max:{abs(errors).max():.2f}{unit}",
+    )
+    rows = list(zip(hist, bins, bins[1:]))
+    for r in zip(rows[::2], rows[1::2]):
+        s = ""
+        for h, _b, e in r:
+            s += f"\t{h:.2f}%\t < {e:.0f}{unit}\t"
+        print(s)
+
+    print(*[f"{h:2.2f}" for h, b, e in rows][:-2], "", sep="% ")
+    # print([e for h, b, e in rows])
+
+    if plotting:
+        _f, axarr = plt.subplots(1, 2, figsize=(10, 3))
+        axarr[0].bar(
+            range(len(bins) - 1),
+            hist,
+        )
+        axarr[0].set_xticklabels(bins, fontdict=None, minor=False)
+        axarr[1].hist(np.clip(errors, -70, 70), bins=5)
 
 
 def report_borders(
@@ -110,71 +136,18 @@ class MyCustomDataset(Dataset):
 
     def collate_fn(self, batch: List[File]):
         batch = sorted(batch, key=lambda x: -len(x.features_spectogram))
-        result = {'original': batch}
+        result = {'original': batch, 'size': len(batch)}
         first = batch[0]
         for k in first.__fields__.keys():
             values = [getattr(item, k) for item in batch]
             result[k] = self.features_batch_process(values) if torch.is_tensor(values[0]) else values
         return result
 
-    def batch(self, batch_size):
-        return DataLoader(dataset=self, batch_size=batch_size, shuffle=True, collate_fn=self.collate_fn)
-
-
-def train(
-    model,
-    num_epochs,
-    data_iter,
-    loss_function,
-    train_function,
-    eval_iter=None,
-    lr_decay=0.9,
-    lr=0.001,
-    weight_decay=1e-5,
-):
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
-    # optimizer.
-    # optimizer = torch.optim.ASGD(model.parameters(), lr=lr, weight_decay=weight_decay)
-    print(optimizer)
-
-    # lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=lr_decay)
-    lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
-    eval_iter = eval_iter or data_iter
-    eval_iter = [eval_iter] if not isinstance(eval_iter, list) else eval_iter
-
-    for epoch in range(1, num_epochs + 1):
-        for e_iter in eval_iter:
-            eval_loss = evaluate(model, e_iter, train_function, loss_function)
-        lr_scheduler.step(eval_loss)
-
-        # print("Starting epoch %d, learning rate is %f" % (epoch, lr_scheduler.get_lr()[0]))
-        errors = []
-        for batch in tqdm(data_iter):
-            model.zero_grad()
-            model.train()
-            optimizer.zero_grad()
-            loss = train_function(batch, model, loss_function)
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 3)
-            optimizer.step()
-            errors.append((loss.clone().detach().cpu().numpy(), batch))
-
-    for e_iter in eval_iter:
-        evaluate(model, e_iter, train_function, loss_function)
-
-
-def evaluate(model, data_iter, train_function, loss_function):
-    model.eval()
-    total_loss = 0
-    size = 0
-    with torch.no_grad():
-        for batch in data_iter:
-            total_loss += abs(train_function(batch, model, loss_function).item())
-            size += 1
-    print(
-        f"  Evaluation[{getattr(data_iter, 'prefix', '')}] - avg_loss: {total_loss / size:.7f} count:{size} Total loss:{total_loss:.7f}",
-    )
-    return total_loss / size
+    def batch(self, batch_size, shuffle=True, num_workers=8,  persistent_workers=True):
+        return DataLoader(
+            dataset=self, batch_size=batch_size, shuffle=shuffle, collate_fn=self.collate_fn,
+            num_workers=num_workers,  persistent_workers=persistent_workers,
+        )
 
 
 def position_gradient_trainer(batch: Dict[str, UtteranceBatch], model: nn.Module, loss_function: nn.Module):
@@ -183,17 +156,17 @@ def position_gradient_trainer(batch: Dict[str, UtteranceBatch], model: nn.Module
     target = batch['target_timestamps']
 
     result = model(
-        features_transcription.padded.to(model.device),
-        features_transcription.masks.to(model.device),
-        features_audio.padded.to(model.device),
-        features_audio.masks.to(model.device),
+        features_transcription.padded,
+        features_transcription.masks,
+        features_audio.padded,
+        features_audio.masks,
     )
     # reject last border which is EOF
     masks = target.masks
     # masks.sum() + batch_size should be the original count
     masks[:, :-1] *= masks[:, 1:]
     masks[:, -1] = False
-    return loss_function(result, target.padded.to(model.device), masks.to(model.device))
+    return loss_function(result, target.padded, masks), result
 
 
 class MaskedMSE(nn.Module):
@@ -205,8 +178,53 @@ class MaskedMSE(nn.Module):
         return self.mse(pred, target)
 
 
+import pytorch_lightning as pl
+
+loss_func = MaskedMSE()
+
+
+class Thing(pl.LightningModule):
+
+    def __init__(self):
+        super().__init__()
+        soft_pointer_model = SoftPointerNetwork(54, 26, 256, dropout=0.05)
+        soft_pointer_model.load(path="spn/trained_weights/position_model-final.pth")
+        self.soft_pointer_model = soft_pointer_model
+
+    def training_step(self, batch, batch_idx):
+        loss, _ = position_gradient_trainer(batch, self.soft_pointer_model.with_gradient, loss_func)
+        self.log('train_loss', loss, batch_size=batch['size'])
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        loss, _ = position_gradient_trainer(batch, self.soft_pointer_model.with_gradient, loss_func)
+        self.log('val_loss', loss, batch_size=batch['size'])
+        return loss
+
+    def test_step(self, batch, batch_idx):
+        loss, _ = position_gradient_trainer(batch, self.soft_pointer_model.with_gradient, loss_func)
+        self.log('test_loss', loss, batch_size=batch['size'])
+
+    def forward(self, batch):
+        _, result = position_gradient_trainer(batch, self.soft_pointer_model.with_gradient, loss_func)
+        return result
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.AdamW(self.parameters(), lr=0.0001, weight_decay=1e-5)
+        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.25)
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": lr_scheduler,
+                "monitor": "val_loss",
+            },
+        }
+
+
+# tensorboard --logdir lightning_logs/
 if __name__ == '__main__':
     import warnings
+
     warnings.filterwarnings("ignore")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -220,28 +238,30 @@ if __name__ == '__main__':
     test_files = load_files(base, test_files)
     test_dataset = MyCustomDataset(test_files)
 
-    soft_pointer_model = SoftPointerNetwork(54, 26, 256, device=device, dropout=0.05)
-    soft_pointer_model.load(path="spn/trained_weights/position_model-final.pth")
+    module = Thing()
+    # generated = generate_borders(module, test_dataset, batch_size=128)
+    # generated = fix_borders(generated, report_error=550)
+    # report_borders(generated, plotting=False)
 
-    generated = generate_borders(soft_pointer_model.with_gradient, test_dataset, batch_size=128)
-    generated = fix_borders(generated, report_error=550)
-    report_borders(generated, plotting=False)
+    # lr 1e-5 bad, 1e-4 good, 1e-3 bad
+    # features_transcription +next
+    trainer = pl.Trainer(
+        gpus=1,
+        # gpus=2, plugins=pl.plugins.DDPPlugin(find_unused_parameters=False),
+        max_epochs=26,
+        max_time=timedelta(seconds=480),
+        # precision=16,  # 23e 8.2s -> 19e 9.2s
+        gradient_clip_val=0.5,  # this is very beneficial
+        progress_bar_refresh_rate=2,
+        log_every_n_steps=8,  # todo: hmm?
+        callbacks=[
+            pl.callbacks.StochasticWeightAveraging(swa_lrs=0.00001),
+            pl.callbacks.LearningRateMonitor(logging_interval='step'),
+            pl.callbacks.RichProgressBar(),
+        ]
+    )
+    trainer.fit(module, test_dataset.batch(64), test_dataset.batch(128, shuffle=False))
 
-    torch.cuda.empty_cache()
-    # SHOULD BE Evaluation[] - avg_loss: 1.7691183 count:21 Total loss:37.1514837
-    lr = 0.0000970
-    # lr = 0.00000970
-    # lr = 0.0000000970
-    # for lr in [0.000970 / 4, 0.0000970, 0.00000970, 0.0000000970]:
-    train(
-        soft_pointer_model.with_gradient,
-        int(25),
-        test_dataset.batch(64),
-        MaskedMSE(),
-        eval_iter=[test_dataset.batch(128)],
-        train_function=position_gradient_trainer,
-        lr_decay=0.98, lr=lr, weight_decay=1e-05)
-
-    generated = generate_borders(soft_pointer_model.with_gradient, test_dataset)
+    generated = generate_borders(module, test_dataset)
     generated = fix_borders(generated, report_error=550)
     report_borders(generated, plotting=False)

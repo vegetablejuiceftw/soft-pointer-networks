@@ -10,7 +10,7 @@ from fastdtw import dtw as slowdtw
 from matplotlib import cm
 from matplotlib.pyplot import figure
 from matplotlib.ticker import FormatStrFormatter
-from torchtext.legacy.data import BucketIterator
+# from torchtext.legacy.data import BucketIterator
 
 from spn.constants import DURATION_SCALER, KNOWN_LABELS, ms_per_step, POS_DIM, WIN_STEP
 from spn.dataset_loader import dedupe, find_borders, Utterance

@@ -19,7 +19,6 @@ class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
         embedding_transcription_size,
         embedding_audio_size,
         hidden_size,
-        device,
         dropout=0.35,
         # position encoding time scaling
         time_transcription_scale=8.344777745411855,
@@ -29,7 +28,6 @@ class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
         super().__init__()
         self.mode = self.Mode.gradient
         self.position_encoding_size = position_encoding_size
-        self.device = device
         self.use_iter = False
         self.use_pos_encode = True
         self.use_pre_transformer = True
@@ -39,14 +37,14 @@ class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
             nn.Sigmoid(),
             nn.Linear(32, embedding_transcription_size),
             nn.Sigmoid(),
-        ).to(device)
+        )
 
         self.a_transformer = nn.Sequential(
             nn.Linear(embedding_audio_size, 32),
             nn.Sigmoid(),
             nn.Linear(32, embedding_audio_size),
             nn.Sigmoid(),
-        ).to(device)
+        )
 
         self.encoder_transcription = Encoder(
             hidden_size=hidden_size,
@@ -67,18 +65,16 @@ class SoftPointerNetwork(ModeSwitcherBase, ExportImportMixin, nn.Module):
         )
 
         self.attn = Attention(None)
-        self.gradient = (torch.cumsum(torch.ones(2 ** 14), 0).unsqueeze(1) - 1).to(device)
-        self.zero = torch.zeros(hidden_size, 2048, self.position_encoding_size).to(device)
+        gradient = (torch.cumsum(torch.ones(2 ** 14), 0).unsqueeze(1) - 1)
+        self.register_buffer("gradient", gradient)
         self.pos_encode = PositionalEncoding(self.position_encoding_size, dropout, scale=time_audio_scale)
-
-        self.to(device)
 
     def weights_to_positions(self, weights, argmax=False, position_encodings=False):
         batch, _trans_len, seq_len = weights.shape
 
         if position_encodings:
             position_encoding = self.pos_encode(
-                torch.zeros(batch, seq_len, self.position_encoding_size).to(self.device),
+                torch.zeros(batch, seq_len, self.position_encoding_size)#.to(self.device),
             )
             positions = torch.bmm(weights, position_encoding)
             return positions[:, :]
