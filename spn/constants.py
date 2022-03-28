@@ -121,3 +121,11 @@ MAP_LABELS = {
     label: ([int(KNOWN_LABELS.index(label) == i) for i in range(KNOWN_LABELS_COUNT)], KNOWN_LABELS.index(label))
     for label in KNOWN_LABELS
 }
+
+WEIGHTS = {
+    label: max(FOUND_LABELS[TRANSFORM_MAPPING.get(label, label)], FOUND_LABELS[label])
+    for label in KNOWN_LABELS
+}
+TOTAL = max(WEIGHTS.values())
+WEIGHTS = {label: max(0.025, round(1 - (w / TOTAL), 3)) for label, w in WEIGHTS.items()}
+WEIGHTS = dict(sorted(WEIGHTS.items(), key=lambda p: p[1]))

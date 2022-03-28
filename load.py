@@ -1,4 +1,4 @@
-from typing import List, Optional, NamedTuple, Dict
+from typing import List, Optional, NamedTuple, Dict, Tuple
 import os
 
 import pandas as pd
@@ -9,13 +9,13 @@ from pydantic import BaseModel
 
 from tqdm.auto import tqdm
 
-# import pyloudnorm as pyln
+import pyloudnorm as pyln
 import soundfile as sf
 from python_speech_features import logfbank
 from spn.constants import (
     MAP_LABELS,
     NO_BORDER_MAPPING,
-    TRANSFORM_MAPPING, WIN_SIZE, WIN_STEP, INPUT_SIZE,
+    TRANSFORM_MAPPING, WIN_SIZE, WIN_STEP, INPUT_SIZE, WEIGHTS,
 )
 
 class UtteranceBatch(NamedTuple):
@@ -43,6 +43,8 @@ class Array(np.ndarray, metaclass=ArrayMeta):
 class File(BaseModel):
     source: tuple
     config: tuple
+    ids_phonemes: Tuple[str, ...]
+    weights_phonemes: Array[float]
     features_spectogram: Array[float]
     features_phonemes: Array[float]
     target_timestamps: Array[float]
@@ -86,8 +88,6 @@ def process_audio(label_file: str, ms_per_step: float):
         if tag is None:
             tag = prev
             q_tag = True
-            end_ms = (current + end_ms) / 2  # TODO: quiet should be included in the current?
-            # end_ms = max(current, end_ms)
 
         unholy_combination = prev in NO_BORDER_MAPPING and tag in NO_BORDER_MAPPING
         if prev == tag or unholy_combination or q_tag:
@@ -97,19 +97,18 @@ def process_audio(label_file: str, ms_per_step: float):
             tag_mapping.append((tag, end_ms))
 
         prev = tag  # handle same tag occurrence
-        current = int(end_ms // ms_per_step + 1) * ms_per_step
 
-    transcript = [
-        np.array(MAP_LABELS[tag][0])
+    ids, borders, transcript = zip(*[
+        (tag, end_ms, np.array(MAP_LABELS[tag][0]))
         for tag, end_ms in tag_mapping
-    ]
-    borders = [end_ms for tag, end_ms in tag_mapping]
-    return borders, transcript
+    ])
+    weights = tuple(WEIGHTS[tag] for tag in ids)
+    return ids, borders, transcript, weights
 
 
 def load_files(base, files, winlen=WIN_SIZE, winstep=WIN_STEP, nfilt=INPUT_SIZE):
     rate = 16000
-    # meter = pyln.Meter(rate)  # create BS.1770 meter
+    meter = pyln.Meter(rate)  # create BS.1770 meter
     ms_per_step = winstep * 1000
 
     output = []
@@ -118,13 +117,13 @@ def load_files(base, files, winlen=WIN_SIZE, winstep=WIN_STEP, nfilt=INPUT_SIZE)
         label_file = os.path.join(base, "data", label_file)
         audio_file = os.path.join(base, "data", audio_file)
 
-        borders, transcription = process_audio(label_file, ms_per_step)
+        transcription_ids, borders, transcription, weights = process_audio(label_file, ms_per_step)
 
         audio, read_rate = sf.read(audio_file)
         assert read_rate == rate, f"{read_rate} != {rate}"
 
-        # loudness = meter.integrated_loudness(audio)
-        # audio = pyln.normalize.loudness(audio, loudness, -40.0)
+        loudness = meter.integrated_loudness(audio)
+        audio = pyln.normalize.loudness(audio, loudness, -40.0)
 
         fbank_feat = logfbank(
             audio,
@@ -142,6 +141,8 @@ def load_files(base, files, winlen=WIN_SIZE, winstep=WIN_STEP, nfilt=INPUT_SIZE)
         output.append(File(
             source=source,
             config=(winlen, winstep),
+            ids_phonemes=transcription_ids,
+            weights_phonemes=torch.FloatTensor(weights),
             features_spectogram=torch.FloatTensor(fbank_feat),
             features_phonemes=torch.FloatTensor(transcription),
             target_timestamps=torch.FloatTensor(borders) / ms_per_step,

@@ -1,4 +1,3 @@
-from datetime import timedelta
 from typing import List, Dict
 
 import torch
@@ -52,14 +51,15 @@ def generate_borders(
 ):
     model.eval()
     output = []
-    for batch in tqdm(dataset.batch(batch_size)):
-        borders_predicted = model(batch).cpu().detach().numpy()
+    with torch.no_grad():
+        for batch in tqdm(dataset.batch(batch_size)):
+            borders_predicted = model(batch).cpu().detach().numpy()
 
-        for i, item in enumerate(batch['original']):
-            item: File
-            length = batch['target_timestamps'].lengths[i]
-            predicted_border = borders_predicted[i, :length]
-            output.append(item.update(output_timestamps=predicted_border))
+            for i, item in enumerate(batch['original']):
+                item: File
+                length = batch['target_timestamps'].lengths[i]
+                predicted_border = borders_predicted[i, :length]
+                output.append(item.update(output_timestamps=predicted_border))
 
     return output
 
@@ -68,7 +68,8 @@ def display_diff(errors, name="", unit="ms", plotting=False):
     errors = errors.copy()
     hist, bins = np.histogram(
         abs(errors),
-        bins=[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 9999],
+        # bins=[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 9999],
+        bins=[0, 5, 10, 20, 30, 50, 100, 105, 9999],
     )
     hist = np.round(hist / len(errors) * 100, 2)
     hist = np.cumsum(hist)
@@ -154,6 +155,7 @@ def position_gradient_trainer(batch: Dict[str, UtteranceBatch], model: nn.Module
     features_audio = batch['features_spectogram']
     features_transcription = batch['features_phonemes']
     target = batch['target_timestamps']
+    # weights = batch['weights_phonemes']
 
     result = model(
         features_transcription.padded,
@@ -166,21 +168,74 @@ def position_gradient_trainer(batch: Dict[str, UtteranceBatch], model: nn.Module
     # masks.sum() + batch_size should be the original count
     masks[:, :-1] *= masks[:, 1:]
     masks[:, -1] = False
+    # , weights = weights.padded
     return loss_function(result, target.padded, masks), result
 
 
 class MaskedMSE(nn.Module):
     mse = nn.MSELoss()
 
-    def forward(self, pred, target, mask, *_):
+    def forward(self, pred, target, mask, weights=None):
+        if weights is not None:
+            pred = torch.mul(pred, weights)
+            target = torch.mul(target, weights)
+            # pred = pred * weights
+            # target = target * weights
+
         pred = torch.mul(pred, mask)
         target = torch.mul(target, mask)
         return self.mse(pred, target)
 
 
+class DivMaskedMSE(nn.Module):
+    mse = nn.MSELoss()
+    l1 = nn.L1Loss()
+
+    def __init__(self, cutoff, flip=False):
+        super().__init__()
+        self.cutoff = cutoff
+        self.flip = flip
+        print("CUTOFF", cutoff)
+
+    def forward(self, pred, target, mask, *weight):
+        # print(weight.shape)
+        diff = torch.abs(pred - target)
+        if not self.flip:
+            diff = diff > self.cutoff
+        else:
+            diff = diff < self.cutoff
+
+        # pred = pred * weight[:, :-1]
+        # target = target * weight[:, :-1]
+
+        mask_diff = mask & diff
+        pred = torch.mul(pred, mask_diff)
+        target = torch.mul(target, mask_diff)
+        mse = self.mse(pred, target)
+        # return mse
+
+        mask_diff = mask & ~diff
+        pred = torch.mul(pred, mask_diff)
+        target = torch.mul(target, mask_diff)
+        l1 = self.l1(pred, target)
+
+        return mse + l1
+
+
+class MaskedL1(nn.Module):
+    l1 = nn.L1Loss()
+
+    def forward(self, pred, target, mask, *_):
+        pred = torch.mul(pred, mask)
+        target = torch.mul(target, mask)
+        return self.l1(pred, target)
+
+
 import pytorch_lightning as pl
 
 loss_func = MaskedMSE()
+# loss_func = MaskedL1()
+# loss_func = DivMaskedMSE(1.5, flip=False)
 
 
 class Thing(pl.LightningModule):
@@ -188,7 +243,7 @@ class Thing(pl.LightningModule):
     def __init__(self):
         super().__init__()
         soft_pointer_model = SoftPointerNetwork(54, 26, 256, dropout=0.05)
-        soft_pointer_model.load(path="spn/trained_weights/position_model-final.pth")
+        # soft_pointer_model.load(path="spn/trained_weights/position_model-final.pth")
         self.soft_pointer_model = soft_pointer_model
 
     def training_step(self, batch, batch_idx):
@@ -210,8 +265,13 @@ class Thing(pl.LightningModule):
         return result
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(), lr=0.0001, weight_decay=1e-5)
-        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.25)
+        # lr = 0.00001
+        lr = 0.000001  # long time
+        # lr = 0.0000001
+        print("LR", lr)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=lr, weight_decay=1e-5)
+        # lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.25, patience=5)
+        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.9)
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
@@ -233,34 +293,57 @@ if __name__ == '__main__':
     # limit = 16
 
     base = ".data"
-    file_path = f"{base}/test_data.csv"
-    test_files = load_csv(file_path, sa=False)[:limit]
+    test_files = load_csv(f"{base}/test_data.csv", sa=False)[:limit]
     test_files = load_files(base, test_files)
     test_dataset = MyCustomDataset(test_files)
 
-    module = Thing()
-    # generated = generate_borders(module, test_dataset, batch_size=128)
-    # generated = fix_borders(generated, report_error=550)
-    # report_borders(generated, plotting=False)
+    module = Thing.load_from_checkpoint("example3.ckpt")
+    generated = generate_borders(module, test_dataset)
+    generated = fix_borders(generated, report_error=550)
+    report_borders(generated, plotting=False)
+
+    train_files = load_csv(f"{base}/train_data.csv", sa=False)[:limit]
+    train_files = load_files(base, train_files)
+    train_dataset = MyCustomDataset(train_files)
 
     # lr 1e-5 bad, 1e-4 good, 1e-3 bad
-    # features_transcription +next
+    # dropout: lower is better?
+    # clip val: 3.5 did not affect
+    # weights: no real effect?
+    # pos embeddings: removed
+    # panns
+    class Benchmark(pl.callbacks.Callback):
+
+        def __init__(self, dataset) -> None:
+            super().__init__()
+            self.dataset = dataset
+            self.count = 0
+
+        def on_train_epoch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
+            self.count += 1
+            # generated = generate_borders(pl_module, self.dataset, batch_size=256)
+            # generated = fix_borders(generated, report_error=550)
+            print("Epoch", self.count)
+            # report_borders(generated, plotting=False)
+
     trainer = pl.Trainer(
         gpus=1,
         # gpus=2, plugins=pl.plugins.DDPPlugin(find_unused_parameters=False),
-        max_epochs=26,
-        max_time=timedelta(seconds=480),
+        max_epochs=10,
+        # max_time=dict(seconds=300 * 1),
         # precision=16,  # 23e 8.2s -> 19e 9.2s
         gradient_clip_val=0.5,  # this is very beneficial
         progress_bar_refresh_rate=2,
         log_every_n_steps=8,  # todo: hmm?
         callbacks=[
-            pl.callbacks.StochasticWeightAveraging(swa_lrs=0.00001),
+            # pl.callbacks.StochasticWeightAveraging(swa_epoch_start=1),
             pl.callbacks.LearningRateMonitor(logging_interval='step'),
             pl.callbacks.RichProgressBar(),
+            # Benchmark(test_dataset),
         ]
     )
-    trainer.fit(module, test_dataset.batch(64), test_dataset.batch(128, shuffle=False))
+    trainer.fit(module, train_dataset.batch(64), test_dataset.batch(128, shuffle=False))
+    trainer.save_checkpoint("example3.ckpt")
 
     generated = generate_borders(module, test_dataset)
     generated = fix_borders(generated, report_error=550)
