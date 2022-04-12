@@ -8,6 +8,7 @@ import numpy as np
 from pydantic import BaseModel
 
 from tqdm.auto import tqdm
+import webdataset as wds
 
 import pyloudnorm as pyln
 import soundfile as sf
@@ -17,6 +18,7 @@ from spn.constants import (
     NO_BORDER_MAPPING,
     TRANSFORM_MAPPING, WIN_SIZE, WIN_STEP, INPUT_SIZE, WEIGHTS,
 )
+
 
 class UtteranceBatch(NamedTuple):
     padded: torch.tensor
@@ -48,7 +50,12 @@ class File(BaseModel):
     features_spectogram: Array[float]
     features_phonemes: Array[float]
     target_timestamps: Array[float]
-    output_timestamps: Optional[Array[float]] = None
+    target_durations: Array[float]
+    target_occurrences: Array[int]
+
+    output_timestamps: Optional[Array[float]]
+    output_durations: Optional[Array[float]]
+    output_occurrences: Optional[Array[int]]
 
     def update(self, **kwargs):
         return self.copy(update=kwargs)
@@ -135,17 +142,122 @@ def load_files(base, files, winlen=WIN_SIZE, winstep=WIN_STEP, nfilt=INPUT_SIZE)
 
         # some audio instances are too short for the audio transcription
         # and the winlen cut :(
-        fbank_feat = np.vstack([fbank_feat] + [fbank_feat[-1]] * 20)
-        fbank_feat = fbank_feat[:int(borders[-1] // ms_per_step)]
+        max_len = int(borders[-1] // ms_per_step) + 8
+        fbank_feat = np.vstack([fbank_feat] + [fbank_feat[-1]] * 40)
+        fbank_feat = fbank_feat[:max_len]
+
+        target_occurrence = np.zeros(max_len, dtype=np.int64)
+        current = 0
+        for phoneme, border in zip(transcription_ids, borders):
+            target_occurrence[current:] = MAP_LABELS[phoneme][1]
+            current = int(border // ms_per_step)
+
+        durations = np.array(borders) / borders[-1]
+        durations[1:] -= durations[:-1]
 
         output.append(File(
             source=source,
             config=(winlen, winstep),
             ids_phonemes=transcription_ids,
-            weights_phonemes=torch.FloatTensor(weights),
-            features_spectogram=torch.FloatTensor(fbank_feat),
-            features_phonemes=torch.FloatTensor(transcription),
-            target_timestamps=torch.FloatTensor(borders) / ms_per_step,
+            weights_phonemes=np.array(weights, dtype=np.float32),
+            features_spectogram=np.array(fbank_feat, dtype=np.float32),
+            features_phonemes=np.array(transcription, dtype=np.float32),
+            target_timestamps=np.array(borders, dtype=np.float32) / ms_per_step,
+            target_durations=np.array(durations, dtype=np.float32),
+            target_occurrences=target_occurrence,
         ))
 
     return output
+
+
+def wds_load(file_path, limit=None) -> List[File]:
+    files = list(tqdm(wds.WebDataset(file_path).slice(limit).decode().map(lambda data: File.construct(**data["data.npz"]))))
+    return files
+
+
+if __name__ == '__main__':
+    import time
+
+    limit = None
+
+    for split in "test", "train":
+        base = ".data"
+        files = load_csv(f"{base}/{split}_data.csv", sa=False)[:limit]
+        files = load_files(base, files)
+        config = "%swl_%sws" % files[0].config
+
+        file_path = f"{split}_data_{config}.tar.xz"
+        with wds.TarWriter(file_path, compress=True) as dst:
+            for file in files:
+                item = {
+                    "__key__": file.source[-1].replace(".wav", "").replace(".WAV", ""),
+                    "data.npz": file.dict(exclude_unset=True),
+                }
+                dst.write(item)
+
+    # arr = wds_load(file_path)
+    # print(arr[0])
+
+    # os.makedirs("dumps", exist_ok=True)
+    # total_floats = sum(np.multiply(*f.features_spectogram.shape) for f in files)
+    # print(f"Total floats: {total_floats} from {len(files)} files")
+    #
+    # compress = False
+    # with wds.TarWriter("dumps/webdataset.npy.tar.xz", compress=compress) as dst:
+    #     for file in files:
+    #         item = {
+    #             "__key__": file.source[-1],
+    #             "features_spectogram.npy": file.features_spectogram.numpy(),
+    #         }
+    #         dst.write(item)
+    #
+    # with wds.TarWriter("dumps/webdataset.npz.tar.xz", compress=compress) as dst:
+    #     for file in files:
+    #         item = {
+    #             "__key__": file.source[-1],
+    #             "features_spectogram.npz": dict(array=file.features_spectogram),
+    #         }
+    #         dst.write(item)
+    #
+    # with wds.TarWriter("dumps/webdataset.pyd.tar.xz", compress=compress) as dst:
+    #     for file in files:
+    #         item = {
+    #             "__key__": file.source[-1],
+    #             "features_spectogram.pyd": file.features_spectogram,
+    #         }
+    #         dst.write(item)
+    #
+    # with wds.TarWriter("dumps/webdataset.pth.tar.xz", compress=compress) as dst:
+    #     for file in files:
+    #         item = {
+    #             "__key__": file.source[-1],
+    #             "features_spectogram.pth": file.features_spectogram,
+    #         }
+    #         dst.write(item)
+    #
+    #
+    # def get_size(path):
+    #     size = os.path.getsize(path)
+    #     if size < 1024:
+    #         return f"{size} bytes"
+    #     elif size < 1024 * 1024:
+    #         return f"{round(size / 1024, 2)} KB"
+    #     elif size < 1024 * 1024 * 1024:
+    #         return f"{round(size / (1024 * 1024), 2)} MB"
+    #     elif size < 1024 * 1024 * 1024 * 1024:
+    #         return f"{round(size / (1024 * 1024 * 1024), 2)} GB"
+    #
+    #
+    # for file_name in os.listdir('dumps'):
+    #     file_path = 'dumps/' + file_name
+    #
+    #     start = time.time()
+    #     for _ in range(10):
+    #         if "webdataset" in file_name:
+    #             arr = list(wds.WebDataset(file_path).decode())
+    #     e = arr[0]
+    #     e.pop("__key__")
+    #     e.pop("__url__")
+    #     e = next(iter(e.values()))
+    #     total_time = f'   Time: {time.time() - start:.4f}   {type(e).__name__}'
+    #     print(file_name, "   ", get_size(path=file_path), total_time)

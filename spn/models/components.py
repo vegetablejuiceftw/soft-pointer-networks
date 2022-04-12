@@ -179,7 +179,7 @@ class Encoder(nn.Module):
         if not skip_pos_encode:
             x = self.pos_encode(x)
 
-        hidden = hidden[:2, :, :] + hidden[2:, :, :]
+        # hidden = hidden[:2, :, :] + hidden[2:, :, :]
         return x, hidden
 
 

@@ -4,8 +4,8 @@ cache
 .dvc/plots
 html
 /html-*/
-/AWS/scratch.yml
 /lightning_logs
+checkpoints*
 
 source
 data
