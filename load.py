@@ -56,6 +56,7 @@ class File(BaseModel):
     output_timestamps: Optional[Array[float]]
     output_durations: Optional[Array[float]]
     output_occurrences: Optional[Array[int]]
+    audio: Optional[Array[int]]
 
     def update(self, **kwargs):
         return self.copy(update=kwargs)
@@ -165,6 +166,7 @@ def load_files(base, files, winlen=WIN_SIZE, winstep=WIN_STEP, nfilt=INPUT_SIZE)
             target_timestamps=np.array(borders, dtype=np.float32) / ms_per_step,
             target_durations=np.array(durations, dtype=np.float32),
             target_occurrences=target_occurrence,
+            audio=audio,
         ))
 
     return output

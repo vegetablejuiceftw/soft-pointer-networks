@@ -37,6 +37,8 @@ tqdm = "^4.63.0"
 jupyter = "^1.0.0"
 pytorch-lightning = "^1.5.10"
 setuptools = "59.5.0"
+torchlibrosa = "^0.0.9"
+panns-inference = "^0.0.7"
 
 [tool.poetry.dev-dependencies]
 pytest = "==6.*"

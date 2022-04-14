@@ -206,25 +206,28 @@ def weights_trainer(batch: Dict[str, UtteranceBatch], model: nn.Module, loss_fun
     # gradient = torch.FloatTensor([1, 2, 3, 4, 5, 6]).to(result.device)
 
     losses = []
-    w = torch.take_along_dim(result, target, 2).clip(max=.80).sum(axis=-1, keepdims=True)
+    w = torch.take_along_dim(result, target, 2).sum(axis=-1, keepdims=True)
     loss = 1 - torch.mul(w, masks.unsqueeze(-1)).sum() / masks.sum()
     losses.append(loss)
-
+    #
     # delta = batch['target_timestamps'].padded - target_long.squeeze(-1)
-    # diff = (torch.take_along_dim(result, target, 2).clip(max=.75) * gradient).sum(axis=-1) - (delta + 0)
+    # diff = (torch.take_along_dim(result, target, 2) * gradient).sum(axis=-1) - (delta + 0)
     # loss = torch.pow(diff, 1).abs().sum() / masks.sum()
     # losses.append(loss)
 
+    # .clip(max=.66)
     # loss = loss_func((torch.take_along_dim(result, target, 2) * target).sum(axis=-1), batch['target_timestamps'].padded, masks)
-    # diff = (torch.take_along_dim(result, target, 2).clip(max=.66) * target).sum(axis=-1) - batch['target_timestamps'].padded
-    # loss = torch.pow(diff, 2).sum() / masks.sum()
     # losses.append(loss)
-
-    loss = sum(losses)
-
-    # loss = loss_func_nll(result, target.padded.clone().to(torch.long), masks)
-    # loss = loss_func_ce(result, target.padded.clone().to(torch.long), masks)
-    return loss, result, [(result.clone().detach().cpu().numpy(), batch['original'])]
+    # # diff = (torch.take_along_dim(result, target, 2) * target).sum(axis=-1) - batch['target_timestamps'].padded
+    # # diff = torch.mul(diff, masks)
+    # # loss = torch.pow(diff, 1).abs().sum() / masks.sum()
+    # # losses.append(loss)
+    #
+    # loss = loss_func_nll(result, target_long.squeeze(-1), masks)
+    # losses.append(loss)
+    # loss = loss_func_ce(result, target_long.squeeze(-1), masks)
+    # losses.append(loss)
+    return sum(losses), result, [(result.clone().detach().cpu().numpy(), batch['original'])]
 
 
 def duration_trainer(batch: Dict[str, UtteranceBatch], model: nn.Module, loss_function: nn.Module):
@@ -400,7 +403,7 @@ class Thing(ModeSwitcherBase, pl.LightningModule):
 
     def __init__(self):
         super().__init__()
-        self.soft_pointer_model = SoftPointerNetwork(54, 26, 64, dropout=0.25)
+        self.soft_pointer_model = SoftPointerNetwork(54, 26, 32, dropout=0.05)
         self.mode = self.soft_pointer_model.mode
 
     def training_step(self, batch, batch_idx):
@@ -457,15 +460,15 @@ class Thing(ModeSwitcherBase, pl.LightningModule):
     def configure_optimizers(self):
         # lr = 0.0015
         # lr = 0.0004
-        lr = 0.0001  # down to 17.1 ~ ish
+        # lr = 0.0001  # down to 17.1 ~ ish
         # lr = 0.00001
-        # lr = 0.000001  # long time
+        lr = 0.000001  # long time
         # lr = 0.0000001  # oc
         # lr = 0.000000076  # oc
         # lr = 0.00000001
         # lr = 0.000000001
         print("LR", lr)
-        optimizer = torch.optim.AdamW(self.parameters(), lr=lr, weight_decay=0.01) # , amsgrad=True)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=lr, weight_decay=0.001) # , amsgrad=True)
         # lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.25, patience=5)
         # 0.9 ** (256 / 4 ) = 0.001
         # lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=0.95)
@@ -514,19 +517,19 @@ if __name__ == '__main__':
                 dirpath="checkpoints-ce3/", filename="clean-{epoch:02d}-{epoch_loss:.4f}",
                 save_top_k=2, monitor="epoch_loss",
             ),
-            pl.callbacks.ModelCheckpoint(
-                dirpath="checkpoints-ce3/", filename="clean",
-                save_top_k=1, monitor="epoch_loss",
-            )
+            # pl.callbacks.ModelCheckpoint(
+            #     dirpath="checkpoints-ce3/", filename="clean",
+            #     save_top_k=1, monitor="epoch_loss",
+            # )
         ]
     )
 
     # module = Thing()
-    module = Thing.load_from_checkpoint("checkpoints-ce3/clean.ckpt", strict=False)
+    # module = Thing.load_from_checkpoint("checkpoints-ce3/clean-epoch=533-epoch=epoch_loss=2.1731.ckpt", strict=False)
 
     # module = Thing.load_from_checkpoint("checkpoints/clean-epoch=48-epoch=epoch_loss=2.9561.ckpt"
     #                                     , strict=False)
-    # module = Thing.load_from_checkpoint("clean-start-ce2.ckpt", strict=False)
+    module = Thing.load_from_checkpoint("clean-start-ce3.ckpt", strict=False)
     # module = Thing.load_from_checkpoint("clean-start-mt-p.ckpt", strict=False)
     # module = Thing.load_from_checkpoint("clean-start.ckpt", strict=False)
     # module = Thing.load_from_checkpoint("clean-start-64.ckpt", strict=False)
@@ -568,7 +571,7 @@ if __name__ == '__main__':
 
     trainer.fit(module, train_dataset.batch(128))  # , test_dataset.batch(128, shuffle=False))
     sleep(2)
-    # trainer.save_checkpoint(f"clean-start-ce3.ckpt")
+    trainer.save_checkpoint(f"clean-start-ce3.ckpt")
 
     generated = sum(trainer.predict(module.with_gradient, dataloaders=test_dataset.batch(128, shuffle=False)),
                     start=[])

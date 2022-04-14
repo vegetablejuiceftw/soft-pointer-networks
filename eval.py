@@ -12,7 +12,9 @@ if __name__ == '__main__':
     limit = 1500
     # limit = 8
 
-    module = Thing.load_from_checkpoint("checkpoints-ce/clean-epoch=194-epoch=epoch_loss=0.3884.ckpt", strict=False)
+    # module = Thing.load_from_checkpoint("checkpoints-ce3/clean-v5.ckpt", strict=False)
+    # module = Thing.load_from_checkpoint("checkpoints-ce3/clean-epoch=533-epoch=epoch_loss=2.1731.ckpt", strict=False)
+    module = Thing.load_from_checkpoint("clean-start-ce3.ckpt", strict=False)
 
     trainer = pl.Trainer(accelerator='gpu', devices=[1])
 

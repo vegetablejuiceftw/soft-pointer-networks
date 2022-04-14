@@ -487,7 +487,7 @@ test = ["pytest (>=6.2.0)", "pytest-cov", "pytest-subtests", "pytest-xdist", "pr
 name = "cycler"
 version = "0.11.0"
 description = "Composable style cycles"
-category = "dev"
+category = "main"
 optional = false
 python-versions = ">=3.6"
 
@@ -621,7 +621,7 @@ watch = ["pyinotify"]
 
 [[package]]
 name = "dvc"
-version = "2.10.0"
+version = "2.10.1"
 description = "Git for data scientists - manage your code and data together"
 category = "main"
 optional = false
@@ -648,9 +648,7 @@ nanotime = ">=0.5.2"
 networkx = ">=2.5"
 packaging = ">=19.0"
 pathspec = ">=0.9.0,<0.10.0"
-ply = ">=3.9"
 psutil = ">=5.8.0"
-pyasn1 = ">=0.4.1"
 pydot = ">=1.2.4"
 pygtrie = ">=2.3.2"
 pyparsing = ">=2.4.7"
@@ -672,7 +670,7 @@ voluptuous = ">=0.11.7"
 [package.extras]
 all = ["adlfs (>=2021.10.0)", "azure-identity (>=1.4.0)", "knack", "pydrive2[fsspec] (>=1.9.4)", "gcsfs (>=2021.11.1)", "pyarrow (>=1)", "fsspec", "ossfs (>=2021.8.0)", "s3fs[boto3] (>=2021.11.1)", "aiobotocore[boto3] (>2)", "bcrypt", "sshfs[bcrypt] (>=2021.11.2)", "webdav4 (>=0.9.3)"]
 azure = ["adlfs (>=2021.10.0)", "azure-identity (>=1.4.0)", "knack"]
-dev = ["adlfs (>=2021.10.0)", "azure-identity (>=1.4.0)", "knack", "pydrive2[fsspec] (>=1.9.4)", "gcsfs (>=2021.11.1)", "pyarrow (>=1)", "fsspec", "ossfs (>=2021.8.0)", "s3fs[boto3] (>=2021.11.1)", "aiobotocore[boto3] (>2)", "bcrypt", "sshfs[bcrypt] (>=2021.11.2)", "webdav4 (>=0.9.3)", "tpi[ssh] (>=2.1.0)", "wheel (==0.37.1)", "dvc-ssh (==0.0.1a0)", "pytest (==7.1.1)", "pytest-cov (==3.0.0)", "pytest-xdist (==2.5.0)", "pytest-mock (==3.7.0)", "pytest-lazy-fixture (==0.6.3)", "flaky (==3.7.0)", "mock (==4.0.3)", "pytest-timeout (==2.1.0)", "rangehttpserver (==1.2.0)", "mock-ssh-server (==0.9.1)", "wget (==3.2)", "filelock (==3.6.0)", "wsgidav (==4.0.1)", "crc32c (==2.2.post0)", "xmltodict (==0.12.0)", "google-compute-engine (==2.8.13)", "google-cloud-storage (==2.2.1)", "dvclive[image] (==0.6.0)", "hdfs (==2.7.0)", "collective.checkdocs (==0.2)", "pydocstyle (==6.1.1)", "pylint (==2.12.2)", "pylint-pytest (==1.1.2)", "pylint-plugin-utils (==0.7)", "mypy (==0.942)", "types-requests (==2.27.15)", "types-tabulate (==0.8.6)", "types-toml (==0.10.4)", "pytest-docker (==0.11.0)", "pywin32 (>=225)"]
+dev = ["adlfs (>=2021.10.0)", "azure-identity (>=1.4.0)", "knack", "pydrive2[fsspec] (>=1.9.4)", "gcsfs (>=2021.11.1)", "pyarrow (>=1)", "fsspec", "ossfs (>=2021.8.0)", "s3fs[boto3] (>=2021.11.1)", "aiobotocore[boto3] (>2)", "bcrypt", "sshfs[bcrypt] (>=2021.11.2)", "webdav4 (>=0.9.3)", "tpi[ssh] (>=2.1.0)", "dvc-ssh (==0.0.1a0)", "pytest (==7.1.1)", "pytest-cov (==3.0.0)", "pytest-xdist (==2.5.0)", "pytest-mock (==3.7.0)", "pytest-lazy-fixture (==0.6.3)", "flaky (==3.7.0)", "mock (==4.0.3)", "pytest-timeout (==2.1.0)", "filelock (==3.6.0)", "pylint (==2.12.2)", "pylint-pytest (==1.1.2)", "pylint-plugin-utils (==0.7)", "mypy (==0.942)", "types-requests (>=2.27.15)", "types-tabulate (>=0.8.6)", "types-toml (>=0.10.4)", "dvclive[image] (==0.6.0)", "pytest-docker (==0.11.0)", "pywin32 (>=225)"]
 gdrive = ["pydrive2[fsspec] (>=1.9.4)"]
 gs = ["gcsfs (>=2021.11.1)"]
 hdfs = ["pyarrow (>=1)", "fsspec"]
@@ -681,7 +679,7 @@ s3 = ["s3fs[boto3] (>=2021.11.1)", "aiobotocore[boto3] (>2)"]
 ssh = ["bcrypt", "sshfs[bcrypt] (>=2021.11.2)"]
 ssh_gssapi = ["sshfs[gssapi] (>=2021.11.2)"]
 terraform = ["tpi[ssh] (>=2.1.0)"]
-tests = ["tpi[ssh] (>=2.1.0)", "wheel (==0.37.1)", "dvc-ssh (==0.0.1a0)", "pytest (==7.1.1)", "pytest-cov (==3.0.0)", "pytest-xdist (==2.5.0)", "pytest-mock (==3.7.0)", "pytest-lazy-fixture (==0.6.3)", "flaky (==3.7.0)", "mock (==4.0.3)", "pytest-timeout (==2.1.0)", "rangehttpserver (==1.2.0)", "mock-ssh-server (==0.9.1)", "wget (==3.2)", "filelock (==3.6.0)", "wsgidav (==4.0.1)", "crc32c (==2.2.post0)", "xmltodict (==0.12.0)", "google-compute-engine (==2.8.13)", "google-cloud-storage (==2.2.1)", "dvclive[image] (==0.6.0)", "hdfs (==2.7.0)", "collective.checkdocs (==0.2)", "pydocstyle (==6.1.1)", "pylint (==2.12.2)", "pylint-pytest (==1.1.2)", "pylint-plugin-utils (==0.7)", "mypy (==0.942)", "types-requests (==2.27.15)", "types-tabulate (==0.8.6)", "types-toml (==0.10.4)", "pytest-docker (==0.11.0)", "pywin32 (>=225)"]
+tests = ["tpi[ssh] (>=2.1.0)", "dvc-ssh (==0.0.1a0)", "pytest (==7.1.1)", "pytest-cov (==3.0.0)", "pytest-xdist (==2.5.0)", "pytest-mock (==3.7.0)", "pytest-lazy-fixture (==0.6.3)", "flaky (==3.7.0)", "mock (==4.0.3)", "pytest-timeout (==2.1.0)", "filelock (==3.6.0)", "pylint (==2.12.2)", "pylint-pytest (==1.1.2)", "pylint-plugin-utils (==0.7)", "mypy (==0.942)", "types-requests (>=2.27.15)", "types-tabulate (>=0.8.6)", "types-toml (>=0.10.4)", "dvclive[image] (==0.6.0)", "pytest-docker (==0.11.0)", "pywin32 (>=225)"]
 webdav = ["webdav4 (>=0.9.3)"]
 webdhfs_kerberos = ["requests-kerberos (==0.14.0)"]
 
@@ -813,7 +811,7 @@ astor = "*"
 name = "fonttools"
 version = "4.31.2"
 description = "Tools to manipulate font files"
-category = "dev"
+category = "main"
 optional = false
 python-versions = ">=3.7"
 
@@ -1339,7 +1337,7 @@ urllib3 = "*"
 name = "kiwisolver"
 version = "1.4.0"
 description = "A fast implementation of the Cassowary constraint solver"
-category = "dev"
+category = "main"
 optional = false
 python-versions = ">=3.7"
 
@@ -1419,7 +1417,7 @@ python-versions = ">=3.7"
 name = "matplotlib"
 version = "3.5.1"
 description = "Python plotting package"
-category = "dev"
+category = "main"
 optional = false
 python-versions = ">=3.7"
 
@@ -1686,6 +1684,19 @@ optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
 
 [[package]]
+name = "panns-inference"
+version = "0.0.7"
+description = "panns_inference: audio tagging and sound event detection inference toolbox"
+category = "main"
+optional = false
+python-versions = ">=3.6"
+
+[package.dependencies]
+librosa = "*"
+matplotlib = "*"
+torchlibrosa = "*"
+
+[[package]]
 name = "parso"
 version = "0.8.3"
 description = "A Python Parser"
@@ -1755,7 +1766,7 @@ python-versions = "*"
 name = "pillow"
 version = "9.0.1"
 description = "Python Imaging Library (Fork)"
-category = "dev"
+category = "main"
 optional = false
 python-versions = ">=3.7"
 
@@ -1770,14 +1781,6 @@ python-versions = ">=3.6"
 [package.extras]
 dev = ["pre-commit", "tox"]
 testing = ["pytest", "pytest-benchmark"]
-
-[[package]]
-name = "ply"
-version = "3.11"
-description = "Python Lex & Yacc"
-category = "main"
-optional = false
-python-versions = "*"
 
 [[package]]
 name = "poetry-semver"
@@ -2660,7 +2663,7 @@ yaml = ["pyyaml"]
 name = "setuptools-scm"
 version = "6.4.2"
 description = "the blessed package to manage your versions by scm tags"
-category = "dev"
+category = "main"
 optional = false
 python-versions = ">=3.6"
 
@@ -2888,7 +2891,7 @@ python-versions = ">=2.6, !=3.0.*, !=3.1.*, !=3.2.*"
 name = "tomli"
 version = "2.0.1"
 description = "A lil' TOML parser"
-category = "dev"
+category = "main"
 optional = false
 python-versions = ">=3.7"
 
@@ -2902,6 +2905,18 @@ python-versions = ">=3.7.0"
 
 [package.dependencies]
 typing-extensions = "*"
+
+[[package]]
+name = "torchlibrosa"
+version = "0.0.9"
+description = "PyTorch implemention of part of librosa functions."
+category = "main"
+optional = false
+python-versions = ">=3.6"
+
+[package.dependencies]
+librosa = ">=0.6.0"
+numpy = "*"
 
 [[package]]
 name = "torchmetrics"
@@ -3201,7 +3216,7 @@ torch = ["torch"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "fabee34f92e501e3529e46c7f6ef0521d1c266b235a52110d00699be071d24ee"
+content-hash = "08ffcbb8afa7e20f4177b3cb8050bdeadcd4679515250a1a2f815b4550e721c0"
 
 [metadata.files]
 absl-py = [
@@ -3608,8 +3623,8 @@ dulwich = [
     {file = "dulwich-0.20.35.tar.gz", hash = "sha256:953f6301a9df8a091fa88d55eed394a88bf9988cde8be341775354910918c196"},
 ]
 dvc = [
-    {file = "dvc-2.10.0-py3-none-any.whl", hash = "sha256:2dca113686c01d151c1100064b40dee9493da9d0c486fc659488a1d00b6d6a4d"},
-    {file = "dvc-2.10.0.tar.gz", hash = "sha256:ac07c3f185e7fd2dae689c7507ed99438d1247c8742eb2d182bf98d78fcdcce8"},
+    {file = "dvc-2.10.1-py3-none-any.whl", hash = "sha256:0d0069ad8ff23db9341c0ca16b34745c55736489ecced9a8d48ca371ba769d49"},
+    {file = "dvc-2.10.1.tar.gz", hash = "sha256:7dd19d74ca7088167e48269865407a3b402c1de31795b16c77a051280f9a92bf"},
 ]
 dvc-render = [
     {file = "dvc-render-0.0.4.tar.gz", hash = "sha256:1cc460b05d3b26c8fbfdbf7fab642b89b53ec6461547909e3f7cf5d7e72d8364"},
@@ -4294,6 +4309,10 @@ pandocfilters = [
     {file = "pandocfilters-1.5.0-py2.py3-none-any.whl", hash = "sha256:33aae3f25fd1a026079f5d27bdd52496f0e0803b3469282162bafdcbdf6ef14f"},
     {file = "pandocfilters-1.5.0.tar.gz", hash = "sha256:0b679503337d233b4339a817bfc8c50064e2eff681314376a47cb582305a7a38"},
 ]
+panns-inference = [
+    {file = "panns-inference-0.0.7.tar.gz", hash = "sha256:17810f95df074a762081407a1a29b8778a1df19b82928c48b6e75f51f55abade"},
+    {file = "panns_inference-0.0.7-py3-none-any.whl", hash = "sha256:74a527c83d285a3885dcf892d61bb20f82b15217dca8932933a9753d371cc347"},
+]
 parso = [
     {file = "parso-0.8.3-py2.py3-none-any.whl", hash = "sha256:c001d4636cd3aecdaf33cbb40aebb59b094be2a74c556778ef5576c175e19e75"},
     {file = "parso-0.8.3.tar.gz", hash = "sha256:8c07be290bb59f03588915921e29e8a50002acaf2cdc5fa0e0114f91709fafa0"},
@@ -4359,10 +4378,6 @@ pillow = [
 pluggy = [
     {file = "pluggy-1.0.0-py2.py3-none-any.whl", hash = "sha256:74134bbf457f031a36d68416e1509f34bd5ccc019f0bcc952c7b909d06b37bd3"},
     {file = "pluggy-1.0.0.tar.gz", hash = "sha256:4224373bacce55f955a878bf9cfa763c1e360858e330072059e10bad68531159"},
-]
-ply = [
-    {file = "ply-3.11-py2.py3-none-any.whl", hash = "sha256:096f9b8350b65ebd2fd1346b12452efe5b9607f7482813ffca50c22722a807ce"},
-    {file = "ply-3.11.tar.gz", hash = "sha256:00c7c1aaa88358b9c765b6d3000c6eec0ba42abca5351b095321aef446081da3"},
 ]
 poetry-semver = [
     {file = "poetry-semver-0.1.0.tar.gz", hash = "sha256:d809b612aa27b39bf2d0fc9d31b4f4809b0e972646c5f19cfa46c725b7638810"},
@@ -5166,6 +5181,11 @@ torch = [
     {file = "torch-1.11.0-cp39-cp39-win_amd64.whl", hash = "sha256:44a1d02fd20f827f0f36dc26fdcfc45e793806a6ad52769a22260655a77a4369"},
     {file = "torch-1.11.0-cp39-none-macosx_10_9_x86_64.whl", hash = "sha256:50fd9bf85c578c871c28f1cb0ace9dfc6024401c7f399b174fb0f370899f4454"},
     {file = "torch-1.11.0-cp39-none-macosx_11_0_arm64.whl", hash = "sha256:0e48af66ad755f0f9c5f2664028a414f57c49d6adc37e77e06fe0004da4edb61"},
+]
+torchlibrosa = [
+    {file = "torchlibrosa-0.0.9-py2.py3-none-any.whl", hash = "sha256:e61c41f1ba8be30594f785deb4d153ed0c6dd281f2b43c6f32cde302909a61ed"},
+    {file = "torchlibrosa-0.0.9-py3-none-any.whl", hash = "sha256:05a5fabf4ac9da8c75af4158af3fdf9ff8ca319010f636316a6f52221dd669ac"},
+    {file = "torchlibrosa-0.0.9.tar.gz", hash = "sha256:f8bcde8cabcb949208c169bdad83c25900d2b9e2309c6e606e4c0d13ec1bbf40"},
 ]
 torchmetrics = [
     {file = "torchmetrics-0.7.3-py3-none-any.whl", hash = "sha256:2eed83d09058e6141b132dd2ee5136549e5d6faff09a8fb13d3a606b6c65cb86"},
