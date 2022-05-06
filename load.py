@@ -47,16 +47,17 @@ class File(BaseModel):
     config: tuple
     ids_phonemes: Tuple[str, ...]
     weights_phonemes: Array[float]
-    features_spectogram: Array[float]
+    # features_spectogram: Array[float]
+    features_audio: Array[float]
     features_phonemes: Array[float]
     target_timestamps: Array[float]
     target_durations: Array[float]
-    target_occurrences: Array[int]
+    # target_occurrences: Array[int]
 
     output_timestamps: Optional[Array[float]]
     output_durations: Optional[Array[float]]
-    output_occurrences: Optional[Array[int]]
-    audio: Optional[Array[int]]
+    # output_occurrences: Optional[Array[int]]
+    # audio: Optional[Array[int]]
 
     def update(self, **kwargs):
         return self.copy(update=kwargs)
@@ -78,11 +79,10 @@ def load_csv(file_path, sa=False):
     return list(zip(a, b))
 
 
-def process_audio(label_file: str, ms_per_step: float):
+def process_audio(label_file: str, sample_rate=16000):
     with open(label_file) as f:
         lines = list(f.readlines())
         labels = []
-        sample_rate = 16000
         for line in lines:
             _, end, tag = line.split()
             end_sec = float(end) / sample_rate
@@ -115,9 +115,9 @@ def process_audio(label_file: str, ms_per_step: float):
 
 
 def load_files(base, files, winlen=WIN_SIZE, winstep=WIN_STEP, nfilt=INPUT_SIZE):
-    rate = 16000
-    meter = pyln.Meter(rate)  # create BS.1770 meter
-    ms_per_step = winstep * 1000
+    expected_rate = 16000
+    # meter = pyln.Meter(rate)  # create BS.1770 meter
+    # ms_per_step = winstep * 1000
 
     output = []
     for i, source in enumerate(tqdm(files)):
@@ -125,48 +125,48 @@ def load_files(base, files, winlen=WIN_SIZE, winstep=WIN_STEP, nfilt=INPUT_SIZE)
         label_file = os.path.join(base, "data", label_file)
         audio_file = os.path.join(base, "data", audio_file)
 
-        transcription_ids, borders, transcription, weights = process_audio(label_file, ms_per_step)
+        transcription_ids, borders, transcription, weights = process_audio(label_file)
 
         audio, read_rate = sf.read(audio_file)
-        assert read_rate == rate, f"{read_rate} != {rate}"
+        assert read_rate == expected_rate, f"{read_rate} != {expected_rate}"
 
-        loudness = meter.integrated_loudness(audio)
-        audio = pyln.normalize.loudness(audio, loudness, -40.0)
+        # loudness = meter.integrated_loudness(audio)
+        # audio = pyln.normalize.loudness(audio, loudness, -40.0)
 
-        fbank_feat = logfbank(
-            audio,
-            rate,
-            winlen=winlen,
-            winstep=winstep,
-            nfilt=nfilt,
-        )  # TODO: remove scaling
+        # fbank_feat = logfbank(
+        #     audio,
+        #     rate,
+        #     winlen=winlen,
+        #     winstep=winstep,
+        #     nfilt=nfilt,
+        # )  # TODO: remove scaling
+        #
+        # # some audio instances are too short for the audio transcription
+        # # and the winlen cut :(
+        # max_len = int(borders[-1] // ms_per_step) + 8
+        # fbank_feat = np.vstack([fbank_feat] + [fbank_feat[-1]] * 40)
+        # fbank_feat = fbank_feat[:max_len]
 
-        # some audio instances are too short for the audio transcription
-        # and the winlen cut :(
-        max_len = int(borders[-1] // ms_per_step) + 8
-        fbank_feat = np.vstack([fbank_feat] + [fbank_feat[-1]] * 40)
-        fbank_feat = fbank_feat[:max_len]
-
-        target_occurrence = np.zeros(max_len, dtype=np.int64)
-        current = 0
-        for phoneme, border in zip(transcription_ids, borders):
-            target_occurrence[current:] = MAP_LABELS[phoneme][1]
-            current = int(border // ms_per_step)
+        # target_occurrence = np.zeros(max_len, dtype=np.int64)
+        # current = 0
+        # for phoneme, border in zip(transcription_ids, borders):
+        #     target_occurrence[current:] = MAP_LABELS[phoneme][1]
+        #     current = int(border // ms_per_step)
 
         durations = np.array(borders) / borders[-1]
         durations[1:] -= durations[:-1]
 
         output.append(File(
             source=source,
-            config=(winlen, winstep),
+            config=(0, 0),
             ids_phonemes=transcription_ids,
             weights_phonemes=np.array(weights, dtype=np.float32),
-            features_spectogram=np.array(fbank_feat, dtype=np.float32),
+            # features_spectogram=np.array(fbank_feat, dtype=np.float32),
             features_phonemes=np.array(transcription, dtype=np.float32),
-            target_timestamps=np.array(borders, dtype=np.float32) / ms_per_step,
+            target_timestamps=np.array(borders, dtype=np.float32),
             target_durations=np.array(durations, dtype=np.float32),
-            target_occurrences=target_occurrence,
-            audio=audio,
+            # target_occurrences=target_occurrence,
+            features_audio=np.array(audio, dtype=np.float32),
         ))
 
     return output
@@ -181,14 +181,14 @@ if __name__ == '__main__':
     import time
 
     limit = None
+    # limit = 32
 
     for split in "test", "train":
         base = ".data"
         files = load_csv(f"{base}/{split}_data.csv", sa=False)[:limit]
         files = load_files(base, files)
-        config = "%swl_%sws" % files[0].config
 
-        file_path = f"{split}_data_{config}.tar.xz"
+        file_path = f"{split}_data.tar.xz"
         with wds.TarWriter(file_path, compress=True) as dst:
             for file in files:
                 item = {

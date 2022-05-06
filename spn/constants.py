@@ -4,7 +4,8 @@ from os.path import join
 BASE_PATH = "/content/TIMIT-PLUS"
 FULL_FODLER_PATH = join(BASE_PATH, "data")
 
-WIN_STEP = 0.015
+WIN_STEP = 0.020
+# WIN_STEP = 0.015
 # WIN_STEP = 0.010
 # WIN_STEP = 0.005
 

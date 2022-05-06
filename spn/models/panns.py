@@ -1,3 +1,5 @@
+import logging
+
 import numpy as np
 import torch
 
@@ -31,23 +33,23 @@ class AttBlock(nn.Module):
 
         self.activation = activation
         self.temperature = temperature
-        self.att = nn.Conv1d(in_channels=n_in, out_channels=n_out, kernel_size=1, stride=1, padding=0, bias=True)
+        # self.att = nn.Conv1d(in_channels=n_in, out_channels=n_out, kernel_size=1, stride=1, padding=0, bias=True)
         self.cla = nn.Conv1d(in_channels=n_in, out_channels=n_out, kernel_size=1, stride=1, padding=0, bias=True)
 
-        self.bn_att = nn.BatchNorm1d(n_out)
+        # self.bn_att = nn.BatchNorm1d(n_out)
         self.init_weights()
 
     def init_weights(self):
-        init_layer(self.att)
+        # init_layer(self.att)
         init_layer(self.cla)
-        init_bn(self.bn_att)
+        # init_bn(self.bn_att)
 
     def forward(self, x):
         # x: (n_samples, n_in, n_time)
-        norm_att = torch.softmax(torch.clamp(self.att(x), -10, 10), dim=-1)
+        # norm_att = torch.softmax(torch.clamp(self.att(x), -10, 10), dim=-1)
         cla = self.nonlinear_transform(self.cla(x))
-        x = torch.sum(norm_att * cla, dim=2)
-        return x, norm_att, cla
+        # x = torch.sum(norm_att * cla, dim=2)
+        return None, None, cla
 
     def nonlinear_transform(self, x):
         if self.activation == 'linear':
@@ -56,19 +58,39 @@ class AttBlock(nn.Module):
             return torch.sigmoid(x)
 
 
+def pad_framewise_output(framewise_output, frames_num):
+    """Pad framewise_output to the same length as input frames.
+    Args:
+      framewise_output: (batch_size, frames_num, classes_num)
+      frames_num: int, number of frames to pad
+    Outputs:
+      output: (batch_size, frames_num, classes_num)
+    """
+    pad = framewise_output[:, -1 :, :].repeat(1, frames_num - framewise_output.shape[1], 1)
+    """tensor for padding"""
+
+    output = torch.cat((framewise_output, pad * 0), dim=1)
+    """(batch_size, frames_num, classes_num)"""
+
+    return output
+
+
 class Cnn14_DecisionLevelAtt(nn.Module):
     def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin,
-                 fmax, classes_num):
+                 fmax, classes_num, interpolate_ratio=32, dropout=0.35):
 
         super(Cnn14_DecisionLevelAtt, self).__init__()
-
         window = 'hann'
         center = True
         pad_mode = 'reflect'
         ref = 1.0
         amin = 1e-10
         top_db = None
-        self.interpolate_ratio = 32  # Downsampled ratio
+        self.reduction_ratio = 4
+        self.interpolate_ratio = interpolate_ratio
+        self.hop_size = hop_size
+        self.sample_rate = sample_rate
+        self.dropout = dropout
 
         # Spectrogram extractor
         self.spectrogram_extractor = Spectrogram(n_fft=window_size, hop_length=hop_size,
@@ -83,8 +105,8 @@ class Cnn14_DecisionLevelAtt(nn.Module):
                                                  freeze_parameters=True)
 
         # Spec augmenter
-        self.spec_augmenter = SpecAugmentation(time_drop_width=64, time_stripes_num=2,
-                                               freq_drop_width=8, freq_stripes_num=2)
+        self.spec_augmenter = SpecAugmentation(time_drop_width=64, time_stripes_num=8,
+                                               freq_drop_width=8, freq_stripes_num=8)
 
         self.bn0 = nn.BatchNorm2d(64)
 
@@ -93,72 +115,99 @@ class Cnn14_DecisionLevelAtt(nn.Module):
         self.conv_block3 = ConvBlock(in_channels=128, out_channels=256)
         self.conv_block4 = ConvBlock(in_channels=256, out_channels=512)
         self.conv_block5 = ConvBlock(in_channels=512, out_channels=1024)
-        self.conv_block6 = ConvBlock(in_channels=1024, out_channels=2048)
+        # self.conv_block6 = ConvBlock(in_channels=1024, out_channels=2048)
 
-        self.fc1 = nn.Linear(2048, 2048, bias=True)
+        self.fc1 = nn.Linear(1024, 2048, bias=True)
         self.att_block = AttBlock(2048, classes_num, activation='linear')
 
         self.init_weight()
+        self.upsample = nn.Upsample(scale_factor=self.interpolate_ratio, mode='linear')
 
     def init_weight(self):
         init_bn(self.bn0)
         init_layer(self.fc1)
 
-    def forward(self, input, mixup_lambda=None):
+    @property
+    def ms_per_step(self):
+        return self.hop_size / self.sample_rate * (self.reduction_ratio / self.interpolate_ratio) * 1000
+
+    def interpolate(self, audio):
+        if self.interpolate_ratio > 1:
+            return self.upsample(audio.transpose(1, 2)).transpose(1, 2)
+        return audio
+
+    def forward(self, input, interpolate=True):
         """
         Input: (batch_size, data_length)"""
 
-        x = self.spectrogram_extractor(input)  # (batch_size, 1, time_steps, freq_bins)
-        x = self.logmel_extractor(x)  # (batch_size, 1, time_steps, mel_bins)
+        dropout_cnn = self.dropout
+        dropout = self.dropout
 
-        frames_num = x.shape[2]
+        with torch.no_grad():
+            audio_samples = input.shape[-1]
+            multiple_of = (audio_samples // self.hop_size // self.reduction_ratio + 3) * self.hop_size * self.reduction_ratio - 1
+            input = pad_framewise_output(input.unsqueeze(-1), multiple_of).squeeze(-1)
 
-        x = x.transpose(1, 3)
-        x = self.bn0(x)
-        x = x.transpose(1, 3)
+            x = self.spectrogram_extractor(input)  # (batch_size, 1, time_steps, freq_bins)
+            x = self.logmel_extractor(x)  # (batch_size, 1, time_steps, mel_bins)
 
-        if self.training:
-            x = self.spec_augmenter(x)
+            x = x.transpose(1, 3)
+            x = self.bn0(x)
+            x = x.transpose(1, 3)
 
-        # Mixup on spectrogram
-        if self.training and mixup_lambda is not None:
-            x = do_mixup(x, mixup_lambda)
+            if self.training:
+                x = self.spec_augmenter(x)
 
-        x = self.conv_block1(x, pool_size=(2, 2), pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = self.conv_block2(x, pool_size=(2, 2), pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = self.conv_block3(x, pool_size=(2, 2), pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = self.conv_block4(x, pool_size=(2, 2), pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = self.conv_block5(x, pool_size=(2, 2), pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = self.conv_block6(x, pool_size=(1, 1), pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
+            spectogram = x
+            # return {'spectogram': spectogram.squeeze(1)}
+
+            logging.debug("x1 %s", x.shape)
+            x = self.conv_block1(x, pool_size=(2, 2), pool_type='avg')
+            x = F.dropout(x, p=dropout_cnn, training=self.training)
+            x = self.conv_block2(x, pool_size=(2, 2), pool_type='avg')
+            x = F.dropout(x, p=dropout_cnn, training=self.training)
+
+        x = self.conv_block3(x, pool_size=(1, 1), pool_type='avg')
+        x = F.dropout(x, p=dropout_cnn, training=self.training)
+
+        x = self.conv_block4(x, pool_size=(1, 1), pool_type='avg')
+        x = F.dropout(x, p=dropout_cnn, training=self.training)
+
+        x = self.conv_block5(x, pool_size=(1, 1), pool_type='avg')
+        x = F.dropout(x, p=dropout_cnn, training=self.training)
+
+        # x = self.conv_block6(x, pool_size=(1, 1), pool_type='avg')
+        # x = F.dropout(x, p=dropout_cnn, training=self.training)
         x = torch.mean(x, dim=3)
+        logging.debug("x2 %s", x.shape)
 
-        x1 = F.max_pool1d(x, kernel_size=3, stride=1, padding=1)
-        x2 = F.avg_pool1d(x, kernel_size=3, stride=1, padding=1)
-        x = x1 + x2
-        x = F.dropout(x, p=0.5, training=self.training)
+        # x1 = F.max_pool1d(x, kernel_size=3, stride=1, padding=1)
+        # x2 = F.avg_pool1d(x, kernel_size=3, stride=1, padding=1)
+        # x = x1 + x2
+        x = F.dropout(x, p=dropout, training=self.training)
         x = x.transpose(1, 2)
+        logging.debug("x3 %s", x.shape)
 
         # # # #
         x = F.relu_(self.fc1(x))
         x = x.transpose(1, 2)
-        x = F.dropout(x, p=0.5, training=self.training)
-        (clipwise_output, _, segmentwise_output) = self.att_block(x)
-        segmentwise_output = segmentwise_output.transpose(1, 2)
+        x = F.dropout(x, p=dropout, training=self.training)
+        logging.debug("x4 %s", x.shape)
 
-        # Get framewise output
-        framewise_output = interpolate(segmentwise_output, self.interpolate_ratio)
-        framewise_output = pad_framewise_output(framewise_output, frames_num)
+        _, _, segmentwise_output = self.att_block(x)
+        framewise_output = segmentwise_output.transpose(1, 2)
 
-        output_dict = {'framewise_output': framewise_output,
-                       'clipwise_output': clipwise_output}
+        if interpolate:
+            framewise_output = self.interpolate(framewise_output)
 
-        return output_dict
+        # logging.info("framewise_output %s %s", framewise_output.shape, spectogram.shape)
+        # framewise_output = pad_framewise_output(framewise_output, frames_num)
+        # logging.info("framewise_output %s", framewise_output.shape)
+
+        return {
+            'framewise_output': framewise_output,
+            'spectogram': spectogram.squeeze(1),
+        }
 
 
 if __name__ == '__main__':

@@ -2,6 +2,7 @@ from random import choice
 from time import sleep
 from typing import List, Dict
 
+import numpy
 import torch
 from torch.utils.data import Dataset, DataLoader
 
@@ -15,11 +16,18 @@ import pytorch_lightning as pl
 import torch.nn as nn
 
 
+def detach(tensor) -> numpy.ndarray:
+    if hasattr(tensor, 'detach'): tensor = tensor.detach()
+    if hasattr(tensor, 'cpu'): tensor = tensor.cpu()
+    if hasattr(tensor, 'numpy'): tensor = tensor.numpy()
+    tensor = tensor.copy()
+    return tensor
+
+
 def fix_borders(generated: List[File], report_error=300):
     output = []
     for item in generated:
-        borders = item.output_timestamps.copy()
-
+        borders = detach(item.output_timestamps)
         switched = False
         prev = 0
         for i, v in enumerate(borders):
@@ -119,7 +127,7 @@ def report_borders(
 
 class MyCustomDataset(Dataset):
     def __init__(self, files: List[File]):
-        self.files = sorted(files, key=lambda x: -len(x.features_spectogram))
+        self.files = sorted(files, key=lambda x: -len(x.features_phonemes))
 
     def __getitem__(self, index):
         return self.files[index]
@@ -140,7 +148,7 @@ class MyCustomDataset(Dataset):
         )
 
     def collate_fn(self, batch: List[File]):
-        batch = sorted(batch, key=lambda x: -len(x.features_spectogram))
+        batch = sorted(batch, key=lambda x: -len(x.features_phonemes))
         result = {'original': batch, 'size': len(batch)}
         first = batch[0]
         for k in first.__fields__.keys():
@@ -148,11 +156,14 @@ class MyCustomDataset(Dataset):
             result[k] = self.features_batch_process(values) if getattr(values[0], 'dtype', None) in [np.float32,                                                                                                   np.int64] else values
         return result
 
-    def batch(self, batch_size, shuffle=True, num_workers=8, persistent_workers=True):
+    def batch(self, batch_size, shuffle=True, mp=True, num_workers=4, persistent_workers=True):
+        extra = {}
+        if mp:
+            extra = dict(num_workers=num_workers,  persistent_workers=persistent_workers, prefetch_factor=2)
         return DataLoader(
             dataset=self, batch_size=batch_size, shuffle=shuffle, collate_fn=self.collate_fn,
-            num_workers=num_workers,  persistent_workers=persistent_workers, prefetch_factor=4,
             pin_memory=True,
+            **extra,
         )
 
 
@@ -205,6 +216,7 @@ def weights_trainer(batch: Dict[str, UtteranceBatch], model: nn.Module, loss_fun
     # target = torch.dstack([target_long - 2, target_long - 1, target_long, target_long + 1, target_long + 2, target_long + 3]).clip(min=0)
     # gradient = torch.FloatTensor([1, 2, 3, 4, 5, 6]).to(result.device)
 
+
     losses = []
     w = torch.take_along_dim(result, target, 2).sum(axis=-1, keepdims=True)
     loss = 1 - torch.mul(w, masks.unsqueeze(-1)).sum() / masks.sum()
@@ -244,7 +256,6 @@ def duration_trainer(batch: Dict[str, UtteranceBatch], model: nn.Module, loss_fu
         features_audio.padded,
         features_audio.masks,
     )
-
 
     result_local = result.clone().detach().cpu().numpy()
     items = [item.update(output_durations=result_local[i, :end])
