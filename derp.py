@@ -30,8 +30,8 @@ trainer = pl.Trainer(accelerator='gpu', devices=[1])
 # trainer = pl.Trainer(accelerator='cpu')
 
 # limit, split = 1500, "test"
-limit, split = 1000, "train"
-limit, split = 32, "train"
+# limit, split = 1000, "train"
+# limit, split = 32, "train"
 # limit, split = 16, "test"
 for split in "test", "train":
     limit = 128

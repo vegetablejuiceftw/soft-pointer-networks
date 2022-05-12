@@ -86,7 +86,7 @@ class Cnn14_DecisionLevelAtt(nn.Module):
         ref = 1.0
         amin = 1e-10
         top_db = None
-        self.reduction_ratio = 4
+        self.reduction_ratio = 8
         self.interpolate_ratio = interpolate_ratio
         self.hop_size = hop_size
         self.sample_rate = sample_rate
@@ -167,8 +167,8 @@ class Cnn14_DecisionLevelAtt(nn.Module):
             x = self.conv_block2(x, pool_size=(2, 2), pool_type='avg')
             x = F.dropout(x, p=dropout_cnn, training=self.training)
 
-        x = self.conv_block3(x, pool_size=(1, 1), pool_type='avg')
-        x = F.dropout(x, p=dropout_cnn, training=self.training)
+            x = self.conv_block3(x, pool_size=(2, 2), pool_type='avg')
+            x = F.dropout(x, p=dropout_cnn, training=self.training)
 
         x = self.conv_block4(x, pool_size=(1, 1), pool_type='avg')
         x = F.dropout(x, p=dropout_cnn, training=self.training)

@@ -59,6 +59,63 @@ loss_func_nll = MaskedNLL()
 loss_func_mse = MaskedMSE()
 
 
+def att_forward(output, mask_output, context, mask_context):
+    # https://arxiv.org/abs/1706.03762
+    # context & mask is what we attend to
+    batch_size, hidden_size, input_size = output.size(0), output.size(2), context.size(1)
+    # (batch, out_len, dim) * (batch, in_len, dim) -> (batch, out_len, in_len)
+    # matrix by matrix product https://pytorch.org/docs/stable/torch.html#torch.bmm
+    attn = torch.bmm(output, context.transpose(1, 2))
+    # TODO: scale step missing?
+
+    if mask_context is not None:
+        if mask_output is not None:
+            attn = attn.transpose(1, 2)
+            attn.data.masked_fill_(~mask_output.unsqueeze(1), 0)
+            attn = attn.transpose(1, 2)
+
+        attn.data.masked_fill_(~mask_context.unsqueeze(1), -float('inf'))
+
+    attn = torch.softmax(attn.view(-1, input_size), dim=1).view(batch_size, -1, input_size)
+    return attn
+
+
+def progressive_masking_att(model, encoded_phonemes, masks_phonemes, encoded_audio, mask_audio):
+    activation = nn.Tanh()
+
+    encoded_phonemes = activation(encoded_phonemes)
+    encoded_audio = activation(encoded_audio)
+
+    # tensor to store decoder outputs
+    batch_size, out_seq_len, _ = encoded_phonemes.shape
+    w = torch.zeros(batch_size, out_seq_len, encoded_audio.shape[1]).to(encoded_audio.device)
+    w_mask_history, w_mask, iter_mask_audio = [], None, mask_audio
+
+    for t in range(out_seq_len):
+        iter_input = encoded_phonemes[:, t:(t + 1), :]
+
+        if len(w_mask_history) == model.history_size:
+            w_mask = w_mask_history[0]
+            iter_mask_audio = mask_audio * (w_mask > model.min_activation) if mask_audio is not None else w_mask > model.min_activation
+
+        iter_mask_transcription = masks_phonemes[:, t:(t + 1)] if masks_phonemes is not None else None
+
+        # _, w_slice = model.multihead_attn(
+        #     iter_input,
+        #     encoded_audio,
+        #     encoded_audio,  # index gradient?
+        # )
+
+        w_slice = att_forward(iter_input, iter_mask_transcription, encoded_audio, iter_mask_audio)
+
+        w[:, t:(t + 1), :] = w_slice
+
+        w_slice_mask = torch.cumsum(w_slice.squeeze(1).clone(), dim=1).detach()
+        w_mask_history = w_mask_history[-model.history_size + 1:] + [w_slice_mask]
+
+    return w
+
+
 def predict_weights(batch: Dict[str, UtteranceBatch], model: 'Thing'):
     ms_per_step = model.panns.ms_per_step
     activation = nn.GELU()
@@ -96,11 +153,7 @@ def predict_weights(batch: Dict[str, UtteranceBatch], model: 'Thing'):
 
     logging.debug([encoded_audio.shape, encoded_phonemes.shape])
 
-    attn_output, attention = model.multihead_attn(
-        activation(encoded_phonemes),
-        activation(encoded_audio),
-        encoded_audio,
-    )
+    attention = progressive_masking_att(model, encoded_phonemes, masks_phonemes, encoded_audio, mask_audio)
 
     attention = attention * masks_phonemes.unsqueeze(2) * mask_audio.unsqueeze(1)
 
@@ -129,7 +182,7 @@ def predict_weights(batch: Dict[str, UtteranceBatch], model: 'Thing'):
 
     # attention = attention * masks_phonemes.unsqueeze(2) * mask_audio.unsqueeze(1)
 
-    logging.debug("OUT: %s attention:%s", attn_output.shape, attention.shape)
+    # logging.debug("OUT: %s attention:%s", attn_output.shape, attention.shape)
 
     target = batch['target_timestamps']
 
@@ -147,8 +200,8 @@ def predict_weights(batch: Dict[str, UtteranceBatch], model: 'Thing'):
     # target_long = steps.clone().unsqueeze(-1).to(torch.long)
     # losses.append(loss_func_nll(attention, target_long.squeeze(-1), target.masks))
     ### main loos func
-    target_long = steps.unsqueeze(-1).round().to(torch.long).clip(min=0, max=attention.shape[-1] - 1)
-    losses.append(loss_func_nll(attention, target_long.squeeze(-1), masks_phonemes))
+    # target_long = steps.unsqueeze(-1).round().to(torch.long).clip(min=0, max=attention.shape[-1] - 1)
+    # losses.append(loss_func_nll(attention, target_long.squeeze(-1), masks_phonemes))
 
     # target_long = steps.clone().unsqueeze(-1).to(torch.long)
     # target = torch.dstack([target_long, target_long + 1]).clip(min=0)
@@ -163,19 +216,19 @@ def predict_weights(batch: Dict[str, UtteranceBatch], model: 'Thing'):
     # losses.append(loss)
 
     # target_long = steps.round().unsqueeze(-1).to(torch.long)
-    # # # # target_index = torch.dstack([target_long])
+    # # # # # target_index = torch.dstack([target_long])
     # target_index = torch.dstack([target_long - 1, target_long, target_long + 1]).clip(min=0, max=attention.shape[-1] - 1)
-    # # target_index = torch.dstack([target_long - 2, target_long - 1, target_long, target_long + 1, target_long + 2]).clip(min=0, max=attention.shape[-1] - 1)
-    # # #
-    # # # #### ALT loss func
-    # # target_long = target.padded.clone().unsqueeze(-1).to(torch.long)
-    # # target_index = torch.dstack([target_long, target_long + 1]).clip(min=0, max=attention.shape[-1] - 1)
-    # predicted = (torch.take_along_dim(attention, target_index, 2) * target_index).sum(axis=-1) * ms_per_step
-    # diff = (predicted - target.padded)
+    # target_index = torch.dstack([target_long - 2, target_long - 1, target_long, target_long + 1, target_long + 2]).clip(min=0, max=attention.shape[-1] - 1)
+    # # # #
+    # # # # #### ALT loss func
+    target_long = target.padded.clone().unsqueeze(-1).to(torch.long)
+    target_index = torch.dstack([target_long, target_long + 1]).clip(min=0, max=attention.shape[-1] - 1)
+    predicted = (torch.take_along_dim(attention, target_index, 2) * target_index).sum(axis=-1) * ms_per_step
+    diff = (predicted - target.padded)
     # diff = torch.pow(diff, 2)
-    # # diff = diff.abs()
-    # loss = diff.sum() / masks_phonemes.sum()
-    # losses.append(loss)
+    diff = diff.abs()
+    loss = diff.sum() / masks_phonemes.sum()
+    losses.append(loss)
 
     return dict(
         loss=sum(losses),
@@ -302,15 +355,17 @@ class Thing(ExportImportMixin, ModeSwitcherBase, pl.LightningModule):
         argmax_gradient = "argmax_gradient"
         duration = "duration"
 
-    def __init__(self, dropout=0.40):
+    def __init__(self, dropout=0.20):
         super().__init__()
         self.mode = self.Mode.weights
+        self.min_activation = 0.1
+        self.history_size = 3
 
         hidden_size = 256
         mel_bins = 64
         self.panns = Cnn14_DecisionLevelAtt(
             sample_rate=16000, window_size=1024,
-            hop_size=96, mel_bins=mel_bins, fmin=50, fmax=14000,
+            hop_size=128, mel_bins=mel_bins, fmin=50, fmax=14000,
             classes_num=hidden_size,
             interpolate_ratio=2,  # to upscale the CNN down sampling
             dropout=dropout,
@@ -340,7 +395,7 @@ class Thing(ExportImportMixin, ModeSwitcherBase, pl.LightningModule):
         )
         self.panns.att_block.activation = "linear"
 
-        self.multihead_attn = nn.MultiheadAttention(hidden_size, 8, batch_first=True, dropout=dropout)
+        # self.multihead_attn = nn.MultiheadAttention(hidden_size, 8, batch_first=True, dropout=dropout)
 
     def training_step(self, batch, batch_idx):
         loss = []
@@ -369,11 +424,10 @@ class Thing(ExportImportMixin, ModeSwitcherBase, pl.LightningModule):
         return self.forward_with(batch)
 
     def configure_optimizers(self):
-        # lr = 0.025
         # lr = 0.0015
         # lr = 0.0009
-        # lr = 0.0004  # can overfit 4.3ms
-        lr = 0.0001  # down to 17.1 ~ ish
+        lr = 0.0004  # can overfit 4.3ms
+        # lr = 0.0001  # down to 17.1 ~ ish
         # lr = 0.00001  # NLL ok
         # lr = 0.000001
         # lr = 0.00000001
@@ -392,7 +446,7 @@ if __name__ == '__main__':
     trainer = pl.Trainer(
         # gpus=1,
         gpus=2, plugins=pl.plugins.DDPPlugin(find_unused_parameters=True),
-        max_epochs=100,
+        max_epochs=16,
         # precision=16,  # 23e 8.2s -> 19e 9.2s
         gradient_clip_val=1.5,  # this is very beneficial
         progress_bar_refresh_rate=1,
@@ -418,11 +472,11 @@ if __name__ == '__main__':
     # model_data = torch.load('Cnn14_DecisionLevelAtt_mAP=0.425.pth', map_location=torch.device('cpu'))['model']
     # # print(model_data.keys())
     # for key in tuple(model_data):
-    #     if 'att_block' in key:
+    #     if any(k in key for k in "fc1 att_block".split()):
     #         del model_data[key]
     # module.panns.load_state_dict(model_data, strict=False)
 
-    trainer.fit(module, dataset.batch(16))  # , test_dataset.batch(128, shuffle=False))
+    trainer.fit(module, dataset.batch(64))  # , test_dataset.batch(128, shuffle=False))
     import time
     time.sleep(1)
     print(trainer.save_checkpoint(f"panns.ckpt"))
