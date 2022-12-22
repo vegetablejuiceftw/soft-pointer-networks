@@ -1,4 +1,4 @@
-# %%
+import os
 from copy import deepcopy
 from collections import Counter
 
@@ -15,8 +15,8 @@ def restructure(item: dict):
     for timeline in item['phonetic_detail'], item['word_detail']:
         # timeline['start'] = np.array(timeline['start']) / sr
         # timeline['stop'] = np.array(timeline['stop']) / sr
-        timeline['start'] = [e / sr for e in timeline['start']]
-        timeline['stop'] = [e / sr for e in timeline['stop']]
+        timeline['start'] = [e / (sr // 1000) for e in timeline['start']]
+        timeline['stop'] = [e / (sr // 1000) for e in timeline['stop']]
     return item
 
 
@@ -61,46 +61,81 @@ TRANSFORM_MAPPING = {
     "gcl": "pau",
 }
 
+count = 0
+
 
 def fold_phonemes(item: dict):
+    global count
     item = deepcopy(item)
     timeline = item['phonetic_detail']
+
     mapped = [
-        (TRANSFORM_MAPPING.get(p, p), start, stop)
-        for p, start, stop in zip(
+        (TRANSFORM_MAPPING.get(p) or p, p, stop)
+        for p, stop in zip(
             timeline['utterance'],
-            timeline['start'],
             timeline['stop'],
         )
         if p != 'q'
     ]
-    timeline['utterance'], timeline['start'], timeline['stop'] = zip(*mapped)
+
+    for i in range(len(mapped) - 1):
+        p, old_p, stop = mapped[i]
+        np, old_np, nstop = mapped[i + 1]
+
+        if p == np and old_p != old_np and p != 'pau':
+            # print(p, [old_p, old_np])
+            count += 1
+            mapped[i] = (None, None, None)
+
+        if p == np and p == 'pau':
+            # count += 1
+            mapped[i] = (None, None, None)
+
+    mapped = [
+        (p, stop)
+        for p, _, stop in mapped
+        if p
+    ]
+
+    timeline['utterance'], timeline['stop'] = zip(*mapped)
+    timeline['start'] = [0, *timeline['stop'][:-1]]
     return item
 
 
-dataset = load_dataset("timit_asr", data_dir='.data')
-print(dataset)
+def produce(path: str):
+    dataset = load_dataset("timit_asr", data_dir='.data')
 
-dataset_test = dto.apply(dataset['test'], restructure)
-dataset_train = dto.apply(dataset['train'], restructure)
+    dataset_test = dto.apply(dataset['test'], restructure)
+    dataset_train = dto.apply(dataset['train'], restructure)
 
-dataset_test = dto.apply(dataset_test, fold_phonemes)
-dataset_train = dto.apply(dataset_train, fold_phonemes)
+    dataset_test = dto.apply(dataset_test, fold_phonemes)
+    dataset_train = dto.apply(dataset_train, fold_phonemes)
 
-# %%
-# print(dataset_train[0])
-phonemes = [p for item in dataset_test + dataset_train for p in item['phonetic_detail']['utterance']]
-c = Counter(phonemes)
-print(len(c))
-print(dict(c.most_common()))
+    dto.write(dataset_test, os.path.join(path, "test_data.tar.xz"))
+    dto.write(dataset_train, os.path.join(path, "train_data.tar.xz"))
 
 
-# %%
-dto.write(dataset_test, ".data/test_data.tar.xz")
-dto.write(dataset_train, ".data/train_data.tar.xz")
+def calculate_phoneme_counts(dataset, duration: int = None):
+    phonemes = [
+        p
+        for item in dataset
+        for p, d in zip(item.phonetic_detail.utterance, item.phonetic_detail.duration)
+        if not duration or d < duration
+    ]
+    c = Counter(phonemes)
+    print(len(c), "duration:", duration)
+    print(dict(c.most_common()))
 
-# %%
-result = dto.wds_load(".data/train_data.tar.xz")
-print(result[0].phonetic_detail.duration)
+
+if __name__ == '__main__':
+    produce('.data')
+    print("done", count)
+    result = dto.wds_load(".data/test_data.tar.xz") + dto.wds_load(".data/train_data.tar.xz")
+    calculate_phoneme_counts(result)
+    calculate_phoneme_counts(result, 16)
 
 # TODO: DTW soft pointer network
+# https://buckeyecorpus.osu.edu/
+# The TIMIT “sa” sentences were considered unsuitable for training or testing as they consist ofonly two phrases and would introduce an unnatural bias in the distribution of ph onemes andtheir contexts.
+# 2350 under 10 ms duration
+# loudness normalize?

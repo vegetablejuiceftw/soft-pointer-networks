@@ -16,7 +16,7 @@ COUNTS = {'pau': 48654, 'ih': 18347, 'n': 11874, 's': 10114, 'iy': 9663, 'l': 94
 
 
 def apply(iterable, function):
-    return [e for e in map(function, iterable) if e]
+    return [e for e in map(function, tqdm(iterable)) if e]
 
 
 class ArrayMeta(type):
@@ -58,7 +58,7 @@ class Timeline(Base):
     @property
     def duration_normalized(self):
         dur = self.duration
-        return dur / dur.sum()
+        return dur / self.stop[-1]
 
 
 class File(BaseModel):
@@ -72,6 +72,11 @@ class File(BaseModel):
     output_timestamps: Optional[Array[float]]
     output_durations: Optional[Array[float]]
     output_occurrences: Optional[Array[int]]
+
+    @property
+    def msr(self):
+        """ ms sample rate """
+        return self.sr // 1000
 
 
 def convert(data: dict):
