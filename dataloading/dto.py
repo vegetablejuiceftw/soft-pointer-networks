@@ -3,7 +3,7 @@ from copy import deepcopy
 import numpy as np
 from pydantic import BaseModel
 import torch
-from typing import List, Optional, NamedTuple, Dict, Tuple
+from typing import List, Optional, NamedTuple, Dict, Tuple, Union
 import webdataset as wds
 
 from tqdm.auto import tqdm
@@ -61,7 +61,7 @@ class Timeline(Base):
         return dur / self.stop[-1]
 
 
-class File(BaseModel):
+class File(Base):
     source: str
     sr: int
     audio: Array[float]
@@ -79,11 +79,53 @@ class File(BaseModel):
         return self.sr // 1000
 
 
+class BatchedArray(Base):
+    padded: Array[Union[float, int]]
+    mask: Array[Union[bool]]
+    length: Array[int]
+
+
+class TimelineBatch(Base):
+    utterance: List[List[str]]
+    start: BatchedArray
+    stop: BatchedArray
+
+
+class FileBatch(Base):
+    source: List[str]
+    original: List[File]
+    sr: List[int]
+    audio: BatchedArray
+
+    phonetic_detail: TimelineBatch
+    word_detail: TimelineBatch
+
+    output_timestamps: Optional[Array[float]]
+    output_durations: Optional[Array[float]]
+    output_occurrences: Optional[Array[int]]
+
+    @property
+    def length(self):
+        return len(self.source)
+
+    def __repr__(self):
+        rep = str(self).replace('\n', ' ').replace('\t', '*')
+        return f"<{rep}>"
+
+    def __str__(self):
+        # TODO: min/max/mean duration
+        return f"FileBatch[{self.length}]" \
+               f"\n\tAudio{(self.audio.length / self.original[0].msr).round().tolist()}" \
+               f"\n\tPhoneme{self.phonetic_detail.stop.length.tolist()}" \
+               f"\n\tWord{self.word_detail.stop.length.tolist()}" \
+               f"\n\tOutput{[k for k in ['output_timestamps', 'output_durations', 'output_durations'] if any(getattr(self, k))]}"
+
+
 def convert(data: dict):
     data = deepcopy(data)
     for timeline in data['json']['phonetic_detail'], data['json']['word_detail']:
-        timeline['start'] = np.array(timeline['start'])
-        timeline['stop'] = np.array(timeline['stop'])
+        timeline['start'] = np.array(timeline['start'], np.float32)
+        timeline['stop'] = np.array(timeline['stop'], np.float32)
 
     return File(
         source=data['json']['source'],
