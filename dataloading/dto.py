@@ -42,6 +42,9 @@ class UtteranceBatch(NamedTuple):
 
 
 class Base(BaseModel):
+    class Config:
+        arbitrary_types_allowed = True
+
     def update(self, **kwargs):
         return self.copy(update=kwargs)
 
@@ -79,30 +82,30 @@ class File(Base):
         return self.sr // 1000
 
 
-class BatchedArray(Base):
-    padded: Array[Union[float, int]]
-    mask: Array[Union[bool]]
-    length: Array[int]
+class ArrayBatch(Base):
+    padded: Union[torch.IntTensor, torch.FloatTensor]
+    mask:  torch.BoolTensor
+    length: torch.IntTensor
 
 
 class TimelineBatch(Base):
     utterance: List[List[str]]
-    start: BatchedArray
-    stop: BatchedArray
+    start: ArrayBatch
+    stop: ArrayBatch
 
 
 class FileBatch(Base):
     source: List[str]
     original: List[File]
     sr: List[int]
-    audio: BatchedArray
+    audio: ArrayBatch
 
     phonetic_detail: TimelineBatch
     word_detail: TimelineBatch
 
-    output_timestamps: Optional[Array[float]]
-    output_durations: Optional[Array[float]]
-    output_occurrences: Optional[Array[int]]
+    output_timestamps: Optional[torch.FloatTensor]
+    output_durations: Optional[torch.FloatTensor]
+    output_occurrences: Optional[torch.IntTensor]
 
     @property
     def length(self):
@@ -118,7 +121,7 @@ class FileBatch(Base):
                f"\n\tAudio{(self.audio.length / self.original[0].msr).round().tolist()}" \
                f"\n\tPhoneme{self.phonetic_detail.stop.length.tolist()}" \
                f"\n\tWord{self.word_detail.stop.length.tolist()}" \
-               f"\n\tOutput{[k for k in ['output_timestamps', 'output_durations', 'output_durations'] if any(getattr(self, k))]}"
+               f"\n\tOutput{[k for k in ['output_timestamps', 'output_durations', 'output_durations'] if getattr(self, k) is not None]}"
 
 
 def convert(data: dict):

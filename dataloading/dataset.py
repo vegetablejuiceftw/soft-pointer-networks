@@ -21,13 +21,13 @@ class UtteranceDataset(Dataset):
     def __len__(self):
         return len(self.files)
 
-    def features_batch_process(self, batch_features: List[np.array]) -> dto.BatchedArray:
+    def features_batch_process(self, batch_features: List[np.array]) -> dto.ArrayBatch:
         # this is used when a list of data items is transformed into a stacked batch
         # TODO: could we, should we, use pack_padded_sequence?
         padded = nn.utils.rnn.pad_sequence([torch.tensor(e) for e in batch_features], batch_first=True)
-        lens = torch.tensor([len(item) for item in batch_features])
+        lens = torch.IntTensor([len(item) for item in batch_features])
         _b, max_len, *_f = padded.shape
-        return dto.BatchedArray(
+        return dto.ArrayBatch(
             padded=padded,
             mask=torch.arange(max_len).expand(len(lens), max_len) < lens.unsqueeze(1),
             length=lens,
@@ -36,7 +36,7 @@ class UtteranceDataset(Dataset):
     def collate_dto(self, batch: List[dto.Base]):
         result = {}
         first = batch[0]
-        for k in first.__fields__.keys():
+        for k in first.dict(exclude_unset=True).keys():
             values = [getattr(item, k) for item in batch]
             result[k] = values
             if getattr(values[0], 'dtype', None) in [np.float32, np.int64]:
@@ -50,7 +50,7 @@ class UtteranceDataset(Dataset):
         result = {'original': batch, **self.collate_dto(batch)}
         return dto.FileBatch.parse_obj(result)
 
-    def batch(self, batch_size, shuffle=True, mp=True, num_workers=4, persistent_workers=True) -> Iterable[FileBatch]:
+    def batch(self, batch_size, shuffle=True, mp=True, num_workers=4, persistent_workers=True) -> Iterable[dto.FileBatch]:
         extra = {}
         if mp:
             extra = dict(num_workers=num_workers, persistent_workers=persistent_workers, prefetch_factor=2)
@@ -63,7 +63,6 @@ class UtteranceDataset(Dataset):
 
 if __name__ == '__main__':
     import os
-    from dataloading import dto, loadz
 
     os.chdir(os.getcwd().split('/dataloading')[0])
     dataset = dto.wds_load(".data/test_data.tar.xz")
