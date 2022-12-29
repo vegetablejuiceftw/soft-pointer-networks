@@ -1,6 +1,7 @@
 import os
 from copy import deepcopy
 from collections import Counter
+from typing import NamedTuple
 
 from datasets import load_dataset
 
@@ -102,6 +103,27 @@ def fold_phonemes(item: dict):
     return item
 
 
+def calculate_phoneme_counts(dataset, duration: int = None):
+    phonemes = [
+        p
+        for item in dataset
+        for p, d in zip(item.phonetic_detail.utterance, item.phonetic_detail.duration)
+        if not duration or d < duration
+    ]
+    c = Counter(phonemes)
+    return c
+
+
+class Identify(NamedTuple):
+    mapping: dict
+
+    def handle(self, item: dict):
+        item = deepcopy(item)
+        timeline = item['phonetic_detail']
+        timeline['id'] = [self.mapping[u] for u in timeline['utterance']]
+        return item
+
+
 def produce(path: str):
     dataset = load_dataset("timit_asr", data_dir='.data')
 
@@ -111,28 +133,31 @@ def produce(path: str):
     dataset_test = dto.apply(dataset_test, fold_phonemes)
     dataset_train = dto.apply(dataset_train, fold_phonemes)
 
+    result = dto.wds_load(".data/test_data.tar.xz") + dto.wds_load(".data/train_data.tar.xz")
+    c = calculate_phoneme_counts(result)
+    ids = {k: i + 1 for i, (k, _) in enumerate(c.most_common())}
+
+    dataset_test = dto.apply(dataset_test, Identify(ids).handle)
+    dataset_train = dto.apply(dataset_train, Identify(ids).handle)
+
     dto.write(dataset_test, os.path.join(path, "test_data.tar.xz"))
     dto.write(dataset_train, os.path.join(path, "train_data.tar.xz"))
 
 
-def calculate_phoneme_counts(dataset, duration: int = None):
-    phonemes = [
-        p
-        for item in dataset
-        for p, d in zip(item.phonetic_detail.utterance, item.phonetic_detail.duration)
-        if not duration or d < duration
-    ]
-    c = Counter(phonemes)
-    print(len(c), "duration:", duration)
-    print(dict(c.most_common()))
-
-
 if __name__ == '__main__':
+    import os
+
+    os.chdir(os.getcwd().split('/dataloading')[0])
+
     produce('.data')
     print("done", count)
     result = dto.wds_load(".data/test_data.tar.xz") + dto.wds_load(".data/train_data.tar.xz")
-    calculate_phoneme_counts(result)
-    calculate_phoneme_counts(result, 16)
+    c = calculate_phoneme_counts(result)
+    print(len(c))
+    print(dict(c.most_common()))
+    c = calculate_phoneme_counts(result, 16)
+    print(len(c), "duration: 16")
+    print(dict(c.most_common()))
 
 # TODO: DTW soft pointer network
 # https://buckeyecorpus.osu.edu/

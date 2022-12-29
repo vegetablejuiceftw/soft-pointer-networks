@@ -72,11 +72,11 @@ def progressive_masking_att(model, encoded_phonemes, masks_phonemes, encoded_aud
     return w
 
 
-def predict_weights(batch: Dict[str, dto.FileBatch], model: 'Thing'):
+def predict_weights(batch: dto.FileBatch, model: 'Thing'):
     ms_per_step = model.panns.ms_per_step
     activation = nn.GELU()
 
-    audio = batch['features_audio'].padded
+    audio = batch.audio.padded
     result = model.panns(audio, interpolate=False)
 
     # encoded_audio = result['framewise_output']
@@ -89,18 +89,19 @@ def predict_weights(batch: Dict[str, dto.FileBatch], model: 'Thing'):
     encoded_audio = model.panns.interpolate(encoded_audio)
 
     mask_audio = torch.ones(size=encoded_audio.shape[:2], dtype=torch.bool, device=encoded_audio.device)
-    for i, item in enumerate(batch['original']):
-        samples = item.features_audio.shape[-1]
+    for i, item in enumerate(batch.original):
+        samples = item.audio.shape[-1]
         steps = int(samples / model.panns.sample_rate * 1000 / ms_per_step)
         mask_audio[i, steps + 1:] = False
     encoded_audio = torch.mul(encoded_audio, mask_audio.unsqueeze(2))
 
-    features_phonemes = batch['features_phonemes']
-    masks_phonemes = features_phonemes.masks.clone()
+    ids_phonemes = batch.phonetic_detail.id
+    features_phonemes = model.encoder_transcription_embedding(ids_phonemes.padded)
+    masks_phonemes = ids_phonemes.mask.clone()
     # masks.sum() + batch_size should be the original count
     masks_phonemes[:, :-1] *= masks_phonemes[:, 1:]
     masks_phonemes[:, -1] = False
-    encoded_phonemes, _ = model.encoder_transcription(features_phonemes)
+    encoded_phonemes, _ = model.encoder_transcription(batch.phonetic_detail.id.update(padded=features_phonemes))
 
     logging.debug([encoded_audio.shape, encoded_phonemes.shape])
 
@@ -110,7 +111,7 @@ def predict_weights(batch: Dict[str, dto.FileBatch], model: 'Thing'):
 
     mask_window = None
 
-    target = batch['target_timestamps']
+    target = batch.phonetic_detail.stop
 
     losses = []
 
@@ -119,7 +120,7 @@ def predict_weights(batch: Dict[str, dto.FileBatch], model: 'Thing'):
     diff = (predicted - target.padded).abs() / 16
     # diff = torch.log1p((predicted - target.padded).abs())
     # diff = (torch.log1p(predicted) - torch.log1p(target.padded)).abs()
-    loss = diff.sum() / target.masks.sum()
+    loss = diff.sum() / target.mask.sum()
     losses.append(loss)
 
     return dict(
@@ -127,6 +128,30 @@ def predict_weights(batch: Dict[str, dto.FileBatch], model: 'Thing'):
         attention=attention,
         batch=batch,
         window=mask_window,
+    )
+
+
+def predict_gradient(batch: dto.FileBatch, model: 'Thing'):
+    attention: torch.FloatTensor = predict_weights(batch, model)['attention']
+
+    ms_per_step = model.panns.ms_per_step
+    position_gradient = (torch.ones_like(attention[0, 0, :]).cumsum(0) - 1) * ms_per_step
+    timestamps = (position_gradient.unsqueeze(1) * attention.transpose(1, 2)).sum(1).detach()
+
+    predictions = [
+        file.update(output_timestamps=timestamps[i, :len(file.phonetic_detail.id)])
+        for i, file in enumerate(batch.original)
+    ]
+    # dict(
+    #     timestamps=timestamps,
+    #     attention=attention,
+    #     batch=batch,
+    #     predictions=predictions,
+    # )
+    return batch.update(
+        attention=attention,
+        original=predictions,
+        output_timestamps=timestamps,
     )
 
 
@@ -171,9 +196,11 @@ class Thing(ExportImportMixin, ModeSwitcherBase, pl.LightningModule):
             dropout=dropout,
         )
 
+        self.encoder_transcription_embedding = torch.nn.Embedding(40, 32, max_norm=True, padding_idx=-1)
+
         self.encoder_transcription = Encoder(
             hidden_size=128,
-            embedding_size=54,
+            embedding_size=32,
             out_dim=hidden_size,
             num_layers=2,
             dropout=dropout,
@@ -194,7 +221,7 @@ class Thing(ExportImportMixin, ModeSwitcherBase, pl.LightningModule):
         self.log('epoch_loss', loss, on_epoch=True, on_step=False, prog_bar=True, batch_size=batch['size'])
         return loss
 
-    def forward_with(self, batch):
+    def forward_with(self, batch: dto.FileBatch):
         if self.is_weights:
             return predict_weights(batch, self)
         if self.is_argmax:

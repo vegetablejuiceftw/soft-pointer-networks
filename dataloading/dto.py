@@ -50,6 +50,7 @@ class Base(BaseModel):
 
 
 class Timeline(Base):
+    id: Optional[Array[int]]
     utterance: List[str]
     start: Array[float]
     stop: Array[float]
@@ -83,15 +84,33 @@ class File(Base):
 
 
 class ArrayBatch(Base):
-    padded: Union[torch.IntTensor, torch.FloatTensor]
-    mask:  torch.BoolTensor
-    length: torch.IntTensor
+    padded: Union[torch.IntTensor, torch.FloatTensor, torch.Tensor]
+    mask:  Union[torch.BoolTensor, torch.Tensor]
+    length: Union[torch.IntTensor, torch.Tensor]
 
 
 class TimelineBatch(Base):
     utterance: List[List[str]]
+    id: Optional[ArrayBatch]
     start: ArrayBatch
     stop: ArrayBatch
+
+
+def move_to(obj, device):
+    # https://discuss.pytorch.org/t/pytorch-tensor-to-device-for-a-list-of-dict/66283/2
+    if torch.is_tensor(obj):
+        return obj.to(device)
+    elif isinstance(obj, dict):
+        res = {}
+        for k, v in obj.items():
+            res[k] = move_to(v, device)
+        return res
+    elif isinstance(obj, list):
+        res = []
+        for v in obj:
+            res.append(move_to(v, device))
+        return res
+    return obj
 
 
 class FileBatch(Base):
@@ -103,9 +122,10 @@ class FileBatch(Base):
     phonetic_detail: TimelineBatch
     word_detail: TimelineBatch
 
-    output_timestamps: Optional[torch.FloatTensor]
-    output_durations: Optional[torch.FloatTensor]
-    output_occurrences: Optional[torch.IntTensor]
+    attention: Optional[Union[torch.FloatTensor, torch.Tensor]]
+    output_timestamps: Optional[Union[torch.FloatTensor, torch.Tensor]]
+    output_durations: Optional[Union[torch.FloatTensor, torch.Tensor]]
+    output_occurrences: Optional[Union[torch.IntTensor, torch.Tensor]]
 
     @property
     def length(self):
@@ -123,12 +143,18 @@ class FileBatch(Base):
                f"\n\tWord{self.word_detail.stop.length.tolist()}" \
                f"\n\tOutput{[k for k in ['output_timestamps', 'output_durations', 'output_durations'] if getattr(self, k) is not None]}"
 
+    def to(self, device):
+        res = move_to(self.dict(), device)
+        return FileBatch.parse_obj(res)
+
 
 def convert(data: dict):
     data = deepcopy(data)
     for timeline in data['json']['phonetic_detail'], data['json']['word_detail']:
         timeline['start'] = np.array(timeline['start'], np.float32)
         timeline['stop'] = np.array(timeline['stop'], np.float32)
+        if 'id' in timeline:
+            timeline['id'] = np.array(timeline['id'], np.int64)
 
     return File(
         source=data['json']['source'],
