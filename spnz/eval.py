@@ -2,33 +2,22 @@ import pytorch_lightning as pl
 
 from dataloading import dto
 from dataloading.dataset import UtteranceDataset
+from dataloading.utils import detach
+from dataloading import transforms
 from spnz.model import Thing
 
 from typing import List, Dict
 
-import numpy
-
 import numpy as np
-import matplotlib.pyplot as plt
 
 
-def detach(tensor) -> numpy.ndarray:
-    if hasattr(tensor, 'detach'): tensor = tensor.detach()
-    if hasattr(tensor, 'cpu'): tensor = tensor.cpu()
-    if hasattr(tensor, 'numpy'): tensor = tensor.numpy()
-    tensor = tensor.copy()
-    return tensor
-
-
-def fix_borders(generated: List[dto.File], report_error=300):
+def fix_borders(generated: List[dto.File]):
     output = []
     for item in generated:
         borders = detach(item.output_timestamps)
-        switched = False
         prev = 0
         for i, v in enumerate(borders):
             if v < prev:
-                switched = True
                 after = borders[i + 1] if i + 1 < len(borders) else borders.max()
                 v = (prev + after - 0.0001) / 2 if prev < after else prev + 0.001
 
@@ -38,16 +27,6 @@ def fix_borders(generated: List[dto.File], report_error=300):
         item = item.update(output_timestamps=borders)
         output.append(item)
 
-        # TODO: enable?
-        # prev = 0
-        # for i, v in enumerate(borders):
-        #     assert v >= prev, f"This should never happen! {i}"
-        #     prev = v
-
-        # diff = item.phonetic_detail.stop - item.output_timestamps
-        # if np.abs(diff).max() > report_error:
-        #     print(f"[id:{item.source}]  [{diff.min():5.0f} {diff.max():5.0f}]  {switched}")
-
     return output
 
 
@@ -55,7 +34,6 @@ def display_diff(errors, name="", unit="ms", plotting=False):
     errors = errors.copy()
     hist, bins = np.histogram(
         abs(errors),
-        # bins=[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 9999],
         bins=[0, 5, 10, 20, 30, 50, 100, 105, 9999],
     )
     hist = np.round(hist / len(errors) * 100, 2)
@@ -72,18 +50,6 @@ def display_diff(errors, name="", unit="ms", plotting=False):
         for h, _b, e in r:
             s += f"\t{h:.2f}%\t < {e:.0f}{unit}\t"
         print(s)
-
-    # print(*[f"{h:2.2f}" for h, b, e in rows][:-2], "", sep="% ")
-    # print([e for h, b, e in rows])
-
-    if plotting:
-        _f, axarr = plt.subplots(1, 2, figsize=(10, 3))
-        axarr[0].bar(
-            range(len(bins) - 1),
-            hist,
-        )
-        axarr[0].set_xticklabels(bins, fontdict=None, minor=False)
-        axarr[1].hist(np.clip(errors, -70, 70), bins=5)
 
 
 def report_duration(
@@ -119,10 +85,6 @@ def report_borders(
     return generated
 
 
-def pad_audio(file: dto.File):
-    return file.update(audio=np.pad(file.audio, [0, 8193]))
-
-
 if __name__ == '__main__':
     import warnings
     import os
@@ -131,27 +93,31 @@ if __name__ == '__main__':
     warnings.filterwarnings("ignore")
 
     limit = 1500
+    limit = 512
     # limit = 32
     # limit = None
 
     # module = Thing.load_from_checkpoint("clean-start-ce3.ckpt", strict=False)
     # module = Thing()
     module = Thing.load_from_checkpoint("panns128.ckpt", strict=False)
+    # module = Thing.load_from_checkpoint("panns128-1,55ms-14,9ms.ckpt", strict=False)
     # module = Thing.load_from_checkpoint("panns-1000.ckpt", strict=False)
+    # module = Thing.load_from_checkpoint("lightning_logs/version_3/checkpoints/epoch=4-step=320.ckpt", strict=False)
     # module.min_activation = 0.1
     # module.history_size = 2
     # module.history_size = None
 
-    # module = Thing.load_from_checkpoint("lightning_logs/version_3/checkpoints/epoch=4-step=320.ckpt", strict=False)
     module.eval()
 
     trainer = pl.Trainer(accelerator='gpu', devices=[1])
 
     for split in "train", "test":
         file_path = ".data/%s_data.tar.xz"
-        dataset = dto.wds_load(file_path % split, limit=limit if split != "test" else None)
-        dataset = [d for d in dataset if "SA" not in d.source]
-        dataset = dto.apply(dataset, pad_audio)
+        dataset = dto.wds_load(file_path % split, limit=limit)
+        dataset = dto.apply(dataset, transforms.DefaultTransform().handle)
+
+        # dataset = [d for d in dataset if "SA" not in d.source]
+        # dataset = dto.apply(dataset, pad_audio)
         dataset = UtteranceDataset(dataset)
 
         # 42ms / 20ms

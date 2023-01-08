@@ -122,7 +122,7 @@ def progressive_masking_att(model, encoded_phonemes, masks_phonemes, encoded_aud
 
     # tensor to store decoder outputs
     batch_size, out_seq_len, _ = encoded_phonemes.shape
-    w = torch.zeros(batch_size, out_seq_len, encoded_audio.shape[1]).to(encoded_audio.device)
+    w = torch.zeros(batch_size, out_seq_len, encoded_audio.shape[1], device=encoded_audio.device)
     w_mask_history, w_mask, iter_mask_audio = [], None, mask_audio
 
     for t in range(out_seq_len):
@@ -203,7 +203,7 @@ def predict_weights(batch: dto.FileBatch, model: 'Thing'):
     loss_names = [
         "gradient_full",
         "interpolation_weight",
-        "gradient_context",
+        # "gradient_context",
         # "nll",
         # "nll", "nll_noisy",
     ]
@@ -252,20 +252,6 @@ def predict_weights(batch: dto.FileBatch, model: 'Thing'):
         diff = diff.clip(min=0, max=1.0)
         loss = diff.sum() / masks_phonemes.sum()  # is mask handled here nicely?
         losses.append(loss)
-
-    # NO NO NO
-    # target_long = (target.padded / ms_per_step).clone().unsqueeze(-1).to(torch.long)
-    # # target_index = torch.dstack([target_long - 1, target_long, target_long + 1]).clip(min=0, max=attention.shape[-1] - 1)
-    # # target_index = torch.dstack([target_long - 2, target_long - 1, target_long, target_long + 1, target_long + 2]).clip(min=0, max=attention.shape[-1] - 1)
-    # target_index = torch.dstack([target_long, target_long + 1]).clip(min=0, max=attention.shape[-1] - 1)
-    # print(torch.take_along_dim(attention, target_index, 2).sum(axis=-1).shape)
-    # diff = 1 - (torch.take_along_dim(attention, target_index, 2)).sum(axis=-1)
-    # # diff = torch.log1p(diff)
-    # # diff = (torch.log1p(predicted) - torch.log1p(target.padded)).abs()
-    # # diff = diff.abs()
-    # # diff = diff ** 2
-    # loss = diff.sum() / masks_phonemes.sum()
-    # losses.append(loss)
 
     if "interpolation_weight" in loss_names:
         target_steps = (target.padded / ms_per_step).clone()
@@ -334,7 +320,7 @@ class Thing(ExportImportMixin, ModeSwitcherBase, pl.LightningModule):
         argmax_gradient = "argmax_gradient"
         duration = "duration"
 
-    def __init__(self, dropout=0.15):
+    def __init__(self, dropout=0.3):
         super().__init__()
         self.mode = self.Mode.weights
         self.min_activation = 0.1

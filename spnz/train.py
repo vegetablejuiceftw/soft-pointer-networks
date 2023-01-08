@@ -1,11 +1,9 @@
 import pytorch_lightning as pl
 import torch
 import time
-import numpy as np
 
-from dataloading import dto
+from dataloading import dto, transforms
 from dataloading.dataset import UtteranceDataset
-from spnz.eval import fix_borders, report_borders
 from spnz.model import Thing
 
 
@@ -51,10 +49,8 @@ if __name__ == '__main__':
 
     file_path = ".data/%s_data.tar.xz"
     dataset = dto.wds_load(file_path % "train", limit=limit)
-    # dataset = dto.apply(dataset, pad_audio)
-    # dataset = dto.apply(dataset, limit_file)
-    # print(dataset[0])
-    # print(dataset[1])
+    dataset = dto.apply(dataset, transforms.DefaultTransform().handle)
+
     # dataset = [d for d in dataset if "SA" not in d.source]  # loss is larger than mean ms error
     # dataset = [d for d in dataset if "SA" in d.source]
     print(len(dataset))
@@ -62,20 +58,7 @@ if __name__ == '__main__':
     for batch in UtteranceDataset(dataset).batch(64):
         print(batch)
         break
-    # dataset_test = UtteranceDataset( dto.apply(dto.wds_load(file_path % "test", limit=512), pad_audio))
 
     trainer.fit(module, dataset_train.batch(64))
     time.sleep(2)
     trainer.save_checkpoint(checkpoint)
-
-    # for dataset in dataset_train, dataset_test:
-    #     generated = []
-    #     for batch in dataset.batch(128, shuffle=False):
-    #         generated.extend(module.with_gradient(batch).original)
-    #     # result = trainer.predict(module.with_gradient, dataloaders=dataset.batch(128, shuffle=False))
-    #     # print(result)
-    #     # generated = sum([r.original for r in result], start=[])
-    #     # print(len(generated))
-    #     # generated = fix_borders(generated, report_error=550)
-    #     report_borders(generated, plotting=False)
-    #     # break
