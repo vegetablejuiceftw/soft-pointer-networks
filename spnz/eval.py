@@ -111,12 +111,16 @@ def report_borders(
     generated: List[dto.File], plotting=False
 ):
     # reject last border which is EOF
-    diffs = [item.phonetic_detail.stop[:-1] - item.output_timestamps[:-1] for item in generated]
+    diffs = [item.phonetic_detail.stop[:-1] - detach(item.output_timestamps[:-1]) for item in generated]
     diff = np.concatenate(diffs)
 
     print("TOTAL", np.abs(diff).sum(), diff.shape)
     display_diff(diff, "position", plotting=plotting)
     return generated
+
+
+def pad_audio(file: dto.File):
+    return file.update(audio=np.pad(file.audio, [0, 8193]))
 
 
 if __name__ == '__main__':
@@ -126,29 +130,35 @@ if __name__ == '__main__':
     os.chdir(os.getcwd().split('/spnz')[0])
     warnings.filterwarnings("ignore")
 
-    # limit = 1500
-    limit = 8
+    limit = 1500
+    # limit = 32
+    # limit = None
 
     # module = Thing.load_from_checkpoint("clean-start-ce3.ckpt", strict=False)
-    module = Thing()
+    # module = Thing()
+    module = Thing.load_from_checkpoint("panns128.ckpt", strict=False)
+    # module = Thing.load_from_checkpoint("panns-1000.ckpt", strict=False)
+    # module.min_activation = 0.1
+    # module.history_size = 2
+    # module.history_size = None
+
+    # module = Thing.load_from_checkpoint("lightning_logs/version_3/checkpoints/epoch=4-step=320.ckpt", strict=False)
+    module.eval()
 
     trainer = pl.Trainer(accelerator='gpu', devices=[1])
 
-    for split in "test", "train":
-        file_path = f".data/{split}_data.tar.xz"
-        dataset = UtteranceDataset(dto.wds_load(file_path, limit=limit))
-
-        for batch in dataset.batch(batch_size=8, mp=False):
-            print(batch)
-            print(batch.audio.padded.shape)
-            print(batch.phonetic_detail.stop.padded.shape)
-            break
+    for split in "train", "test":
+        file_path = ".data/%s_data.tar.xz"
+        dataset = dto.wds_load(file_path % split, limit=limit if split != "test" else None)
+        dataset = [d for d in dataset if "SA" not in d.source]
+        dataset = dto.apply(dataset, pad_audio)
+        dataset = UtteranceDataset(dataset)
 
         # 42ms / 20ms
-        result = trainer.predict(module.with_gradient, dataloaders=dataset.batch(4, shuffle=False))
+        result = trainer.predict(module.with_gradient, dataloaders=dataset.batch(128, shuffle=False))
         generated = sum([r.original for r in result], start=[])
         print(len(generated))
-        generated = fix_borders(generated, report_error=550)
+        # generated = fix_borders(generated, report_error=550)
         report_borders(generated, plotting=False)
 
         # # 20ms / 10ms

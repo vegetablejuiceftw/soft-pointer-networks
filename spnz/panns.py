@@ -20,7 +20,7 @@ class SpectogramCNN(nn.Module):
         ref = 1.0
         amin = 1e-10
         top_db = None
-        self.reduction_ratio = 1
+        self.reduction_ratio = 2 ** 2
         self.interpolate_ratio = interpolate_ratio
         self.hop_size = hop_size
         self.sample_rate = sample_rate
@@ -38,11 +38,12 @@ class SpectogramCNN(nn.Module):
                                                  top_db=top_db,
                                                  freeze_parameters=True)
 
+        # TODO: might cause worse performance?
         # Spec augmenter
-        self.spec_augmenter = SpecAugmentation(time_drop_width=64, time_stripes_num=8,
-                                               freq_drop_width=8, freq_stripes_num=8)
+        # self.spec_augmenter = SpecAugmentation(time_drop_width=64, time_stripes_num=8,
+        #                                        freq_drop_width=8, freq_stripes_num=8)
 
-        self.bn0 = nn.BatchNorm2d(64)
+        self.bn0 = nn.BatchNorm2d(mel_bins)
 
         self.conv_block1 = ConvBlock(in_channels=1, out_channels=64)
         self.conv_block2 = ConvBlock(in_channels=64, out_channels=128)
@@ -74,23 +75,23 @@ class SpectogramCNN(nn.Module):
             x = self.bn0(x)
             x = x.transpose(1, 3)
 
-            if self.training:
-                x = self.spec_augmenter(x)
+            # if self.training:
+            #     x = self.spec_augmenter(x)
 
-            spectogram = x.squeeze(1)
+            # spectogram = x.squeeze(1)
 
             dropout_cnn = self.dropout
 
-            x = self.conv_block1(x, pool_size=(1, 2), pool_type='avg')
+            x = self.conv_block1(x, pool_size=(2 if self.reduction_ratio >= 2 ** 1 else 1, 2), pool_type='avg')
             x = F.dropout(x, p=dropout_cnn, training=self.training)
 
-            x = self.conv_block2(x, pool_size=(1, 2), pool_type='avg')
+            x = self.conv_block2(x, pool_size=(2 if self.reduction_ratio >= 2 ** 2 else 1, 2), pool_type='avg')
             x = F.dropout(x, p=dropout_cnn, training=self.training)
 
-            x = self.conv_block3(x, pool_size=(1, 2), pool_type='avg')
+            x = self.conv_block3(x, pool_size=(2 if self.reduction_ratio >= 2 ** 3 else 1, 2), pool_type='avg')
             x = F.dropout(x, p=dropout_cnn, training=self.training)
 
-            x = self.conv_block4(x, pool_size=(1, 2), pool_type='avg')
+            x = self.conv_block4(x, pool_size=(2 if self.reduction_ratio >= 2 ** 4 else 1, 2), pool_type='avg')
             x = F.dropout(x, p=dropout_cnn, training=self.training)
 
         # print(spectogram.shape, x.shape)

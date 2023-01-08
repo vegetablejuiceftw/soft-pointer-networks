@@ -30,7 +30,7 @@ def show_tensor(tensor, index=1, figsize=(16, 16), limit=True, normalize=False):
         tensor /= tensor.max()
     plt.figure(figsize=figsize)
     plt.title(str(tensor.shape))
-    plt.imshow(tensor, cmap='winter')
+    plt.imshow(tensor, cmap='winter', interpolation='nearest')
     if limit:
         plt.clim(0, 1)
     plt.show()

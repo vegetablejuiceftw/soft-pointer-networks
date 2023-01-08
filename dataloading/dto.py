@@ -147,7 +147,9 @@ class FileBatch(Base):
         res = move_to(self.dict(), device)
         return FileBatch.parse_obj(res)
 
+import pyloudnorm as pyln
 
+meter = pyln.Meter(16000)  # create BS.1770 meter
 def convert(data: dict):
     data = deepcopy(data)
     for timeline in data['json']['phonetic_detail'], data['json']['word_detail']:
@@ -156,10 +158,14 @@ def convert(data: dict):
         if 'id' in timeline:
             timeline['id'] = np.array(timeline['id'], np.int64)
 
+    audio = data['audio.npy']
+    loudness = meter.integrated_loudness(audio)
+    audio = pyln.normalize.loudness(audio, loudness, -40.0)
+
     return File(
         source=data['json']['source'],
         sr=data['json']['sampling_rate'],
-        audio=data['audio.npy'],
+        audio=audio,
         phonetic_detail=data['json']["phonetic_detail"],
         word_detail=data['json']["word_detail"],
     )

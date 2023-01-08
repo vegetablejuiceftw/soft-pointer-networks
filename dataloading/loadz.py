@@ -63,7 +63,7 @@ TRANSFORM_MAPPING = {
 }
 
 count = 0
-
+MIN_DURATION_MS = 8
 
 def fold_phonemes(item: dict):
     global count
@@ -95,6 +95,22 @@ def fold_phonemes(item: dict):
     mapped = [
         (p, stop)
         for p, _, stop in mapped
+        if p
+    ]
+
+    # print(item['source'], item['word_detail']['utterance'])
+    for i in range(len(mapped) - 2, -1, -1):
+        p, stop = mapped[i]
+        np, nstop = mapped[i + 1]
+
+        if nstop - stop < MIN_DURATION_MS:
+            # print(i, p, np, [nstop, stop], nstop - stop)
+            count += 1
+            mapped[i + 1] = (None, None)
+
+    mapped = [
+        (p, stop)
+        for p, stop in mapped
         if p
     ]
 
@@ -133,8 +149,13 @@ def produce(path: str):
     dataset_test = dto.apply(dataset_test, fold_phonemes)
     dataset_train = dto.apply(dataset_train, fold_phonemes)
 
-    result = dto.wds_load(".data/test_data.tar.xz") + dto.wds_load(".data/train_data.tar.xz")
-    c = calculate_phoneme_counts(result)
+    result = dataset_test + dataset_train
+    phonemes = [
+        p
+        for item in result
+        for p in item['phonetic_detail']['utterance']
+    ]
+    c = Counter(phonemes)
     ids = {k: i + 1 for i, (k, _) in enumerate(c.most_common())}
 
     dataset_test = dto.apply(dataset_test, Identify(ids).handle)
@@ -151,11 +172,13 @@ if __name__ == '__main__':
 
     produce('.data')
     print("done", count)
+    e = dto.wds_load(".data/train_data.tar.xz", limit=2)[1]
+    print(e.source, e.phonetic_detail.utterance)
     result = dto.wds_load(".data/test_data.tar.xz") + dto.wds_load(".data/train_data.tar.xz")
     c = calculate_phoneme_counts(result)
     print(len(c))
     print(dict(c.most_common()))
-    c = calculate_phoneme_counts(result, 16)
+    c = calculate_phoneme_counts(result, 32)
     print(len(c), "duration: 16")
     print(dict(c.most_common()))
 
